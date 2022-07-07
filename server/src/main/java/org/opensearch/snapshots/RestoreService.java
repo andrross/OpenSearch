@@ -84,7 +84,9 @@ import org.opensearch.common.regex.Regex;
 import org.opensearch.common.settings.ClusterSettings;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.unit.TimeValue;
+import org.opensearch.common.util.FeatureFlags;
 import org.opensearch.index.Index;
+import org.opensearch.index.IndexModule;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.shard.IndexShard;
 import org.opensearch.index.shard.ShardId;
@@ -129,7 +131,7 @@ import static org.opensearch.snapshots.SnapshotUtils.filterIndices;
  * method reads information about snapshot and metadata from repository. In update cluster state task it checks restore
  * preconditions, restores global state if needed, creates {@link RestoreInProgress} record with list of shards that needs
  * to be restored and adds this shard to the routing table using
- * {@link RoutingTable.Builder#addAsRestore(IndexMetadata, SnapshotRecoverySource)} method.
+ * {@link RoutingTable.Builder#addAsRestore(IndexMetadata, RecoverySource)} method.
  * <p>
  * Individual shards are getting restored as part of normal recovery process in
  * {@link IndexShard#restoreFromRepository} )}
@@ -431,21 +433,32 @@ public class RestoreService implements ClusterStateApplier {
                                 .getMaxNodeVersion()
                                 .minimumIndexCompatibilityVersion();
                             for (Map.Entry<String, String> indexEntry : indices.entrySet()) {
+                                String renamedIndexName = indexEntry.getKey();
                                 String index = indexEntry.getValue();
                                 boolean partial = checkPartial(index);
-                                SnapshotRecoverySource recoverySource = new SnapshotRecoverySource(
-                                    restoreUUID,
-                                    snapshot,
-                                    snapshotInfo.version(),
-                                    repositoryData.resolveIndexId(index)
-                                );
-                                String renamedIndexName = indexEntry.getKey();
-                                IndexMetadata snapshotIndexMetadata = metadata.index(index);
-                                snapshotIndexMetadata = updateIndexSettings(
-                                    snapshotIndexMetadata,
+
+                                IndexMetadata snapshotIndexMetadata = updateIndexSettings(
+                                    metadata.index(index),
                                     request.indexSettings(),
                                     request.ignoreIndexSettings()
                                 );
+                                final RecoverySource recoverySource;
+                                if (FeatureFlags.isEnabled(FeatureFlags.SEARCHABLE_SNAPSHOTS)
+                                    && IndexModule.Type.REMOTE_SNAPSHOT.getSettingsKey().equals(request.storageType())) {
+                                    recoverySource = RecoverySource.EmptyStoreRecoverySource.INSTANCE;
+                                    snapshotIndexMetadata = addSnapshotToIndexSettings(
+                                        snapshotIndexMetadata,
+                                        snapshot,
+                                        repositoryData.resolveIndexId(index)
+                                    );
+                                } else {
+                                    recoverySource = new SnapshotRecoverySource(
+                                        restoreUUID,
+                                        snapshot,
+                                        snapshotInfo.version(),
+                                        repositoryData.resolveIndexId(index)
+                                    );
+                                }
                                 try {
                                     snapshotIndexMetadata = metadataIndexUpgradeService.upgradeIndexMetadata(
                                         snapshotIndexMetadata,
@@ -1216,5 +1229,17 @@ public class RestoreService implements ClusterStateApplier {
         } catch (Exception t) {
             logger.warn("Failed to update restore state ", t);
         }
+    }
+
+    private static IndexMetadata addSnapshotToIndexSettings(IndexMetadata metadata, Snapshot snapshot, IndexId indexId) {
+        final Settings newSettings = Settings.builder()
+            .put(IndexModule.INDEX_STORE_TYPE_SETTING.getKey(), IndexModule.Type.REMOTE_SNAPSHOT.getSettingsKey())
+            .put(IndexSettings.SNAPSHOT_REPOSITORY.getKey(), snapshot.getRepository())
+            .put(IndexSettings.SNAPSHOT_ID_UUID.getKey(), snapshot.getSnapshotId().getUUID())
+            .put(IndexSettings.SNAPSHOT_ID_NAME.getKey(), snapshot.getSnapshotId().getName())
+            .put(IndexSettings.SNAPSHOT_INDEX_ID.getKey(), indexId.getId())
+            .put(metadata.getSettings())
+            .build();
+        return IndexMetadata.builder(metadata).settings(newSettings).build();
     }
 }
