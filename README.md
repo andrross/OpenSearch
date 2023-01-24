@@ -1,6 +1,7 @@
 <img src="https://opensearch.org/assets/img/opensearch-logo-themed.svg" height="64px">
 
 [![Chat](https://img.shields.io/badge/chat-on%20forums-blue)](https://forum.opensearch.org/c/opensearch/)
+
 [![Documentation](https://img.shields.io/badge/documentation-reference-blue)](https://opensearch.org/docs/latest/opensearch/index/)
 [![Code Coverage](https://codecov.io/gh/opensearch-project/OpenSearch/branch/main/graph/badge.svg)](https://codecov.io/gh/opensearch-project/OpenSearch)
 [![Untriaged Issues](https://img.shields.io/github/issues/opensearch-project/OpenSearch/untriaged?labelColor=red)](https://github.com/opensearch-project/OpenSearch/issues?q=is%3Aissue+is%3Aopen+label%3A"untriaged")
