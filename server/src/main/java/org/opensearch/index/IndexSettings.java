@@ -608,6 +608,7 @@ public final class IndexSettings {
     private final String remoteStoreTranslogRepository;
     private final String remoteStoreRepository;
     private final boolean isRemoteSnapshot;
+    private final boolean isRemoteIndex;
     private Version extendedCompatibilitySnapshotVersion;
 
     // volatile fields are updated via #updateIndexMetadata(IndexMetadata) under lock
@@ -781,6 +782,7 @@ public final class IndexSettings {
         );
         remoteStoreRepository = settings.get(IndexMetadata.SETTING_REMOTE_STORE_REPOSITORY);
         isRemoteSnapshot = IndexModule.Type.REMOTE_SNAPSHOT.match(this.settings);
+        isRemoteIndex = IndexModule.Type.REMOTE_SEARCH.match(this.settings);
 
         if (isRemoteSnapshot && FeatureFlags.isEnabled(SEARCHABLE_SNAPSHOT_EXTENDED_COMPATIBILITY)) {
             extendedCompatibilitySnapshotVersion = SEARCHABLE_SNAPSHOT_EXTENDED_COMPATIBILITY_MINIMUM_VERSION;
@@ -1076,6 +1078,10 @@ public final class IndexSettings {
      */
     public boolean isRemoteSnapshot() {
         return isRemoteSnapshot;
+    }
+
+    public boolean isRemoteIndex() {
+        return isRemoteIndex;
     }
 
     /**
