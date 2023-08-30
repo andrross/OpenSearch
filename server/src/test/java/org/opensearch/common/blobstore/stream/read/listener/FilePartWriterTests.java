@@ -28,17 +28,6 @@ import static org.opensearch.common.blobstore.stream.read.listener.ListenerTestU
 public class FilePartWriterTests extends OpenSearchTestCase {
 
     private Path path;
-    private static ThreadPool threadPool;
-
-    @BeforeClass
-    public static void setup() {
-        threadPool = new TestThreadPool(FilePartWriterTests.class.getName());
-    }
-
-    @AfterClass
-    public static void cleanup() {
-        threadPool.shutdown();
-    }
 
     @Before
     public void init() throws Exception {
@@ -51,17 +40,14 @@ public class FilePartWriterTests extends OpenSearchTestCase {
         int partNumber = 1;
         InputStream inputStream = new ListenerTestUtils.TestInputStream(contentLength);
         InputStreamContainer inputStreamContainer = new InputStreamContainer(inputStream, inputStream.available(), 0);
-        AtomicBoolean anyStreamFailed = new AtomicBoolean();
         TestCompletionListener<Integer> fileCompletionListener = new TestCompletionListener<>();
 
         FilePartWriter filePartWriter = new FilePartWriter(
             partNumber,
-            inputStreamContainer,
             segmentFilePath,
-            anyStreamFailed,
             fileCompletionListener
         );
-        threadPool.executor(ThreadPool.Names.GENERIC).submit(filePartWriter).get();
+        filePartWriter.onResponse(inputStreamContainer);
 
         assertTrue(Files.exists(segmentFilePath));
         assertEquals(contentLength, Files.size(segmentFilePath));
@@ -76,17 +62,14 @@ public class FilePartWriterTests extends OpenSearchTestCase {
         int partNumber = 1;
         InputStream inputStream = new ListenerTestUtils.TestInputStream(contentLength);
         InputStreamContainer inputStreamContainer = new InputStreamContainer(inputStream, inputStream.available(), offset);
-        AtomicBoolean anyStreamFailed = new AtomicBoolean();
         TestCompletionListener<Integer> fileCompletionListener = new TestCompletionListener<>();
 
         FilePartWriter filePartWriter = new FilePartWriter(
             partNumber,
-            inputStreamContainer,
             segmentFilePath,
-            anyStreamFailed,
             fileCompletionListener
         );
-        threadPool.executor(ThreadPool.Names.GENERIC).submit(filePartWriter).get();
+        filePartWriter.onResponse(inputStreamContainer);
 
         assertTrue(Files.exists(segmentFilePath));
         assertEquals(contentLength + offset, Files.size(segmentFilePath));
@@ -100,17 +83,14 @@ public class FilePartWriterTests extends OpenSearchTestCase {
         int partNumber = 1;
         InputStream inputStream = new ListenerTestUtils.TestInputStream(contentLength);
         InputStreamContainer inputStreamContainer = new InputStreamContainer(inputStream, contentLength, 0);
-        AtomicBoolean anyStreamFailed = new AtomicBoolean();
         TestCompletionListener<Integer> fileCompletionListener = new TestCompletionListener<>();
 
         FilePartWriter filePartWriter = new FilePartWriter(
             partNumber,
-            inputStreamContainer,
             segmentFilePath,
-            anyStreamFailed,
             fileCompletionListener
         );
-        threadPool.executor(ThreadPool.Names.GENERIC).submit(filePartWriter).get();
+        filePartWriter.onResponse(inputStreamContainer);
 
         assertTrue(Files.exists(segmentFilePath));
         assertEquals(contentLength, Files.size(segmentFilePath));
@@ -125,53 +105,20 @@ public class FilePartWriterTests extends OpenSearchTestCase {
         int partNumber = 1;
         InputStream inputStream = new ListenerTestUtils.TestInputStream(contentLength);
         InputStreamContainer inputStreamContainer = new InputStreamContainer(inputStream, contentLength, 0);
-        AtomicBoolean anyStreamFailed = new AtomicBoolean();
         TestCompletionListener<Integer> fileCompletionListener = new TestCompletionListener<>();
 
         IOException ioException = new IOException();
         FilePartWriter filePartWriter = new FilePartWriter(
             partNumber,
-            inputStreamContainer,
             segmentFilePath,
-            anyStreamFailed,
             fileCompletionListener
         );
-        assertFalse(anyStreamFailed.get());
-        filePartWriter.processFailure(ioException);
+        filePartWriter.onFailure(ioException);
 
-        assertTrue(anyStreamFailed.get());
-        assertFalse(Files.exists(segmentFilePath));
-
-        // Fail stream again to simulate another stream failure for same file
-        filePartWriter.processFailure(ioException);
-
-        assertTrue(anyStreamFailed.get());
         assertFalse(Files.exists(segmentFilePath));
 
         assertEquals(0, fileCompletionListener.getResponseCount());
         assertEquals(1, fileCompletionListener.getFailureCount());
         assertEquals(ioException, fileCompletionListener.getException());
-    }
-
-    public void testFilePartWriterStreamFailed() throws Exception {
-        Path segmentFilePath = path.resolve(UUID.randomUUID().toString());
-        int contentLength = 100;
-        int partNumber = 1;
-        InputStream inputStream = new ListenerTestUtils.TestInputStream(contentLength);
-        InputStreamContainer inputStreamContainer = new InputStreamContainer(inputStream, inputStream.available(), 0);
-        AtomicBoolean anyStreamFailed = new AtomicBoolean(true);
-        TestCompletionListener<Integer> fileCompletionListener = new TestCompletionListener<>();
-
-        FilePartWriter filePartWriter = new FilePartWriter(
-            partNumber,
-            inputStreamContainer,
-            segmentFilePath,
-            anyStreamFailed,
-            fileCompletionListener
-        );
-        threadPool.executor(ThreadPool.Names.GENERIC).submit(filePartWriter).get();
-
-        assertFalse(Files.exists(segmentFilePath));
-        assertEquals(0, fileCompletionListener.getResponseCount());
     }
 }

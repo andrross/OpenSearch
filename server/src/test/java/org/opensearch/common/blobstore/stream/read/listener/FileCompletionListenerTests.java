@@ -52,7 +52,7 @@ public class FileCompletionListenerTests extends OpenSearchTestCase {
         assertEquals(0, completionListener.getResponseCount());
 
         fileCompletionListener.onFailure(exception);
-        assertEquals(2, completionListener.getFailureCount());
+        assertEquals(1, completionListener.getFailureCount());
         assertEquals(exception, completionListener.getException());
     }
 }

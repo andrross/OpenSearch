@@ -10,8 +10,10 @@ package org.opensearch.common.blobstore.stream.read;
 
 import org.opensearch.common.annotation.ExperimentalApi;
 import org.opensearch.common.io.InputStreamContainer;
+import org.opensearch.core.action.ActionListener;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * ReadContext is used to encapsulate all data needed by <code>BlobContainer#readBlobAsync</code>
@@ -19,10 +21,10 @@ import java.util.List;
 @ExperimentalApi
 public class ReadContext {
     private final long blobSize;
-    private final List<InputStreamContainer> partStreams;
+    private final List<AsyncInputStreamContainer> partStreams;
     private final String blobChecksum;
 
-    public ReadContext(long blobSize, List<InputStreamContainer> partStreams, String blobChecksum) {
+    public ReadContext(long blobSize, List<AsyncInputStreamContainer> partStreams, String blobChecksum) {
         this.blobSize = blobSize;
         this.partStreams = partStreams;
         this.blobChecksum = blobChecksum;
@@ -40,7 +42,25 @@ public class ReadContext {
         return blobSize;
     }
 
-    public List<InputStreamContainer> getPartStreams() {
+    public List<AsyncInputStreamContainer> getPartStreams() {
         return partStreams;
+    }
+
+    @ExperimentalApi
+    public interface AsyncInputStreamContainer {
+        void whenComplete(ActionListener<InputStreamContainer> listener);
+
+        static AsyncInputStreamContainer adapt(CompletableFuture<InputStreamContainer> future) {
+            return listener -> future.whenComplete((i, e) -> {
+                if (e == null) {
+                    listener.onResponse(i);
+                } else
+                if (e instanceof Exception) {
+                    listener.onFailure((Exception) e);
+                } else {
+                    listener.onFailure(new Exception(e));
+                }
+            });
+        }
     }
 }

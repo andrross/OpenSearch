@@ -22,11 +22,13 @@ import org.opensearch.core.action.ActionListener;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -124,11 +126,18 @@ public class MockFsVerifyingBlobContainer extends FsBlobContainer implements Ver
                 long contentLength = listBlobs().get(blobName).length();
                 long partSize = contentLength / 10;
                 int numberOfParts = (int) ((contentLength % partSize) == 0 ? contentLength / partSize : (contentLength / partSize) + 1);
-                List<InputStreamContainer> blobPartStreams = new ArrayList<>();
+                List<ReadContext.AsyncInputStreamContainer> blobPartStreams = new ArrayList<>();
                 for (int partNumber = 0; partNumber < numberOfParts; partNumber++) {
                     long offset = partNumber * partSize;
-                    InputStreamContainer blobPartStream = new InputStreamContainer(readBlob(blobName, offset, partSize), partSize, offset);
-                    blobPartStreams.add(blobPartStream);
+                    CompletableFuture<InputStreamContainer> future = new CompletableFuture<>();
+                    future.completeAsync(() -> {
+                        try {
+                            return new InputStreamContainer(readBlob(blobName, offset, partSize), partSize, offset);
+                        } catch (IOException e) {
+                            throw new UncheckedIOException(e);
+                        }
+                    });
+                    blobPartStreams.add(ReadContext.AsyncInputStreamContainer.adapt(future));
                 }
                 ReadContext blobReadContext = new ReadContext(contentLength, blobPartStreams, null);
                 listener.onResponse(blobReadContext);

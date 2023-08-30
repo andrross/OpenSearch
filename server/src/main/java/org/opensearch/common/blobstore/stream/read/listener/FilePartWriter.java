@@ -28,12 +28,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * instance. It performs offset based writes to the file and notifies the {@link FileCompletionListener} on completion.
  */
 @InternalApi
-class FilePartWriter implements Runnable {
+class FilePartWriter implements ActionListener<InputStreamContainer> {
 
     private final int partNumber;
-    private final InputStreamContainer blobPartStreamContainer;
     private final Path fileLocation;
-    private final AtomicBoolean anyPartStreamFailed;
     private final ActionListener<Integer> fileCompletionListener;
     private static final Logger logger = LogManager.getLogger(FilePartWriter.class);
 
@@ -42,49 +40,43 @@ class FilePartWriter implements Runnable {
 
     public FilePartWriter(
         int partNumber,
-        InputStreamContainer blobPartStreamContainer,
         Path fileLocation,
-        AtomicBoolean anyPartStreamFailed,
         ActionListener<Integer> fileCompletionListener
     ) {
         this.partNumber = partNumber;
-        this.blobPartStreamContainer = blobPartStreamContainer;
         this.fileLocation = fileLocation;
-        this.anyPartStreamFailed = anyPartStreamFailed;
         this.fileCompletionListener = fileCompletionListener;
     }
 
     @Override
-    public void run() {
-        // Ensures no writes to the file if any stream fails.
-        if (anyPartStreamFailed.get() == false) {
-            try (FileChannel outputFileChannel = FileChannel.open(fileLocation, StandardOpenOption.WRITE, StandardOpenOption.CREATE)) {
-                try (InputStream inputStream = blobPartStreamContainer.getInputStream()) {
-                    long streamOffset = blobPartStreamContainer.getOffset();
-                    final byte[] buffer = new byte[BUFFER_SIZE];
-                    int bytesRead;
-                    while ((bytesRead = inputStream.read(buffer)) != -1) {
-                        Channels.writeToChannel(buffer, 0, bytesRead, outputFileChannel, streamOffset);
-                        streamOffset += bytesRead;
-                    }
+    public void onResponse(InputStreamContainer inputStreamContainer) {
+        try (FileChannel outputFileChannel = FileChannel.open(fileLocation, StandardOpenOption.WRITE,
+            StandardOpenOption.CREATE))
+        {
+            try (InputStream inputStream = inputStreamContainer.getInputStream()) {
+                long streamOffset = inputStreamContainer.getOffset();
+                final byte[] buffer = new byte[BUFFER_SIZE];
+                int bytesRead;
+                while ((bytesRead = inputStream.read(buffer)) != -1) {
+                    Channels.writeToChannel(buffer, 0, bytesRead, outputFileChannel, streamOffset);
+                    streamOffset += bytesRead;
                 }
-            } catch (IOException e) {
-                processFailure(e);
-                return;
             }
-            fileCompletionListener.onResponse(partNumber);
+        } catch (IOException e) {
+            onFailure(e);
+            return;
         }
+        fileCompletionListener.onResponse(partNumber);
     }
 
-    void processFailure(Exception e) {
+    @Override
+    public void onFailure(Exception e) {
         try {
             Files.deleteIfExists(fileLocation);
         } catch (IOException ex) {
             // Die silently
             logger.info("Failed to delete file {} on stream failure: {}", fileLocation, ex);
         }
-        if (anyPartStreamFailed.getAndSet(true) == false) {
-            fileCompletionListener.onFailure(e);
-        }
+        fileCompletionListener.onFailure(e);
     }
 }

@@ -11,6 +11,7 @@ package org.opensearch.common.blobstore.stream.read.listener;
 import org.opensearch.common.annotation.InternalApi;
 import org.opensearch.core.action.ActionListener;
 
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -25,6 +26,7 @@ class FileCompletionListener implements ActionListener<Integer> {
     private final String fileName;
     private final AtomicInteger completedPartsCount;
     private final ActionListener<String> completionListener;
+    private final AtomicBoolean isFailed = new AtomicBoolean(false);
 
     public FileCompletionListener(int numberOfParts, String fileName, ActionListener<String> completionListener) {
         this.completedPartsCount = new AtomicInteger();
@@ -42,6 +44,8 @@ class FileCompletionListener implements ActionListener<Integer> {
 
     @Override
     public void onFailure(Exception e) {
-        completionListener.onFailure(e);
+        if (isFailed.getAndSet(true) == false) {
+            completionListener.onFailure(e);
+        }
     }
 }
