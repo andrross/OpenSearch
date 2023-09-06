@@ -31,7 +31,6 @@
 
 package org.opensearch;
 
-import java.io.IOException;
 
 /**
  * This exception is thrown when OpenSearch detects
