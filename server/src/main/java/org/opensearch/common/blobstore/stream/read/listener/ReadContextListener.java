@@ -41,20 +41,12 @@ public class ReadContextListener implements ActionListener<ReadContext> {
 
     @Override
     public void onResponse(ReadContext readContext) {
-        logger.trace("Streams received for blob {}", fileName);
         final int numParts = readContext.getNumberOfParts();
         final AtomicBoolean anyPartStreamFailed = new AtomicBoolean();
         FileCompletionListener fileCompletionListener = new FileCompletionListener(numParts, fileName, completionListener);
 
         for (int partNumber = 0; partNumber < numParts; partNumber++) {
-            FilePartWriter filePartWriter = new FilePartWriter(
-                partNumber,
-                readContext.getPartStreams().get(partNumber),
-                fileLocation,
-                anyPartStreamFailed,
-                fileCompletionListener
-            );
-            threadPool.executor(ThreadPool.Names.GENERIC).submit(filePartWriter);
+            readContext.getPartStreams().get(partNumber).whenComplete(new FilePartWriter(partNumber, fileLocation, anyPartStreamFailed, fileCompletionListener));
         }
     }
 

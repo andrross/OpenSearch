@@ -12,6 +12,7 @@ import org.opensearch.common.annotation.ExperimentalApi;
 import org.opensearch.common.io.InputStreamContainer;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * ReadContext is used to encapsulate all data needed by <code>BlobContainer#readBlobAsync</code>
@@ -19,10 +20,10 @@ import java.util.List;
 @ExperimentalApi
 public class ReadContext {
     private final long blobSize;
-    private final List<InputStreamContainer> partStreams;
+    private final List<CompletableFuture<InputStreamContainer>> partStreams;
     private final String blobChecksum;
 
-    public ReadContext(long blobSize, List<InputStreamContainer> partStreams, String blobChecksum) {
+    public ReadContext(long blobSize, List<CompletableFuture<InputStreamContainer>> partStreams, String blobChecksum) {
         this.blobSize = blobSize;
         this.partStreams = partStreams;
         this.blobChecksum = blobChecksum;
@@ -46,7 +47,7 @@ public class ReadContext {
         return blobSize;
     }
 
-    public List<InputStreamContainer> getPartStreams() {
+    public List<CompletableFuture<InputStreamContainer>> getPartStreams() {
         return partStreams;
     }
 }

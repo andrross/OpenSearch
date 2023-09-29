@@ -22,16 +22,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiConsumer;
 
 /**
  * FilePartWriter transfers the provided stream into the specified file path using a {@link FileChannel}
  * instance. It performs offset based writes to the file and notifies the {@link FileCompletionListener} on completion.
  */
 @InternalApi
-class FilePartWriter implements Runnable {
+class FilePartWriter implements BiConsumer<InputStreamContainer, Throwable> {
 
     private final int partNumber;
-    private final InputStreamContainer blobPartStreamContainer;
     private final Path fileLocation;
     private final AtomicBoolean anyPartStreamFailed;
     private final ActionListener<Integer> fileCompletionListener;
@@ -42,25 +42,45 @@ class FilePartWriter implements Runnable {
 
     public FilePartWriter(
         int partNumber,
-        InputStreamContainer blobPartStreamContainer,
         Path fileLocation,
         AtomicBoolean anyPartStreamFailed,
         ActionListener<Integer> fileCompletionListener
     ) {
         this.partNumber = partNumber;
-        this.blobPartStreamContainer = blobPartStreamContainer;
         this.fileLocation = fileLocation;
         this.anyPartStreamFailed = anyPartStreamFailed;
         this.fileCompletionListener = fileCompletionListener;
     }
 
+    void processFailure(Exception e) {
+        try {
+            Files.deleteIfExists(fileLocation);
+        } catch (IOException ex) {
+            // Die silently
+            logger.info("Failed to delete file {} on stream failure: {}", fileLocation, ex);
+        }
+        if (anyPartStreamFailed.getAndSet(true) == false) {
+            fileCompletionListener.onFailure(e);
+        }
+    }
+
     @Override
-    public void run() {
+    public void accept(InputStreamContainer inputStreamContainer, Throwable throwable) {
+        if (throwable != null) {
+            logger.error("Failure result for blob {}-{}", fileLocation, partNumber, throwable);
+            if (throwable instanceof Exception) {
+                processFailure((Exception) throwable);
+            } else {
+                processFailure(new Exception(throwable));
+            }
+            return;
+        }
+
         // Ensures no writes to the file if any stream fails.
         if (anyPartStreamFailed.get() == false) {
             try (FileChannel outputFileChannel = FileChannel.open(fileLocation, StandardOpenOption.WRITE, StandardOpenOption.CREATE)) {
-                try (InputStream inputStream = blobPartStreamContainer.getInputStream()) {
-                    long streamOffset = blobPartStreamContainer.getOffset();
+                try (InputStream inputStream = inputStreamContainer.getInputStream()) {
+                    long streamOffset = inputStreamContainer.getOffset();
                     final byte[] buffer = new byte[BUFFER_SIZE];
                     int bytesRead;
                     while ((bytesRead = inputStream.read(buffer)) != -1) {
@@ -73,18 +93,6 @@ class FilePartWriter implements Runnable {
                 return;
             }
             fileCompletionListener.onResponse(partNumber);
-        }
-    }
-
-    void processFailure(Exception e) {
-        try {
-            Files.deleteIfExists(fileLocation);
-        } catch (IOException ex) {
-            // Die silently
-            logger.info("Failed to delete file {} on stream failure: {}", fileLocation, ex);
-        }
-        if (anyPartStreamFailed.getAndSet(true) == false) {
-            fileCompletionListener.onFailure(e);
         }
     }
 }
