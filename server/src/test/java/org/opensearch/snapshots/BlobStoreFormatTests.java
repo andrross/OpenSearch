@@ -41,7 +41,6 @@ import org.opensearch.common.blobstore.BlobPath;
 import org.opensearch.common.blobstore.BlobStore;
 import org.opensearch.common.blobstore.fs.FsBlobContainer;
 import org.opensearch.common.blobstore.fs.FsBlobStore;
-import org.opensearch.common.blobstore.stream.read.ReadContext;
 import org.opensearch.common.blobstore.stream.write.WriteContext;
 import org.opensearch.common.compress.DeflateCompressor;
 import org.opensearch.common.io.Streams;
@@ -269,11 +268,6 @@ public class BlobStoreFormatTests extends OpenSearchTestCase {
             InputStream inputStream = writeContext.getStreamProvider(Integer.MAX_VALUE).provideStream(0).getInputStream();
             delegate.writeBlob(writeContext.getFileName(), inputStream, writeContext.getFileSize(), true);
             completionListener.onResponse(null);
-        }
-
-        @Override
-        public void readBlobAsync(String blobName, ActionListener<ReadContext> listener) {
-            throw new RuntimeException("read not supported");
         }
 
         @Override

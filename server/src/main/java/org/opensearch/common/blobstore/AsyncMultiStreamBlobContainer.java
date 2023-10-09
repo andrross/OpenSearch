@@ -8,8 +8,6 @@
 
 package org.opensearch.common.blobstore;
 
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.common.blobstore.stream.read.ReadContext;
 import org.opensearch.common.blobstore.stream.write.WriteContext;
 import org.opensearch.core.action.ActionListener;
 
@@ -33,14 +31,6 @@ public interface AsyncMultiStreamBlobContainer extends BlobContainer {
      * @throws IOException if any of the input streams could not be read, or the target blob could not be written to
      */
     void asyncBlobUpload(WriteContext writeContext, ActionListener<Void> completionListener) throws IOException;
-
-    /**
-     * Creates an async callback of a {@link ReadContext} containing the multipart streams for a specified blob within the container.
-     * @param blobName The name of the blob for which the {@link ReadContext} needs to be fetched.
-     * @param listener  Async listener for {@link ReadContext} object which serves the input streams and other metadata for the blob
-     */
-    @ExperimentalApi
-    void readBlobAsync(String blobName, ActionListener<ReadContext> listener);
 
     /*
      * Wether underlying blobContainer can verify integrity of data after transfer. If true and if expected

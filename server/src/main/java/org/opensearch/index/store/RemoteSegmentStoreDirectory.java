@@ -24,8 +24,6 @@ import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.util.Version;
 import org.opensearch.common.UUIDs;
-import org.opensearch.common.blobstore.AsyncMultiStreamBlobContainer;
-import org.opensearch.common.blobstore.stream.read.listener.ReadContextListener;
 import org.opensearch.common.collect.Tuple;
 import org.opensearch.common.io.VersionedCodecStreamWrapper;
 import org.opensearch.common.logging.Loggers;
@@ -46,7 +44,6 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.NoSuchFileException;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -473,70 +470,6 @@ public final class RemoteSegmentStoreDirectory extends FilterDirectory implement
     }
 
     /**
-     * Copies an existing {@code source} file from this directory to a non-existent file (also
-     * named {@code source}) in either {@code destinationDirectory} or {@code destinationPath}.
-     * If the blob container backing this directory supports multipart downloads, the {@code source}
-     * file will be downloaded (potentially in multiple concurrent parts) directly to
-     * {@code destinationPath}. This method will return immediately and {@code fileCompletionListener}
-     * will be notified upon completion.
-     * <p>
-     * If multipart downloads are not supported, then {@code source} file will be copied to a file named
-     * {@code source} in a single part to {@code destinationDirectory}. The download will happen on the
-     * calling thread and {@code fileCompletionListener} will be notified synchronously before this
-     * method returns.
-     *
-     * @param source The source file name
-     * @param destinationDirectory The destination directory (if multipart is not supported)
-     * @param destinationPath The destination path (if multipart is supported)
-     * @param fileTransferTracker Tracker used for file transfer stats
-     * @param fileCompletionListener The listener to notify of completion
-     */
-    public void copyTo(
-        String source,
-        Directory destinationDirectory,
-        Path destinationPath,
-        DirectoryFileTransferTracker fileTransferTracker,
-        ActionListener<String> fileCompletionListener
-    ) {
-        final String blobName = getExistingRemoteFilename(source);
-        if (destinationPath != null && remoteDataDirectory.getBlobContainer() instanceof AsyncMultiStreamBlobContainer) {
-            long length = 0L;
-            try {
-                length = fileLength(source);
-            } catch (IOException ex) {
-                logger.error("Unable to fetch segment length for stats tracking", ex);
-            }
-            final long fileLength = length;
-            final long startTime = System.currentTimeMillis();
-            fileTransferTracker.addTransferredBytesStarted(fileLength);
-            final AsyncMultiStreamBlobContainer blobContainer = (AsyncMultiStreamBlobContainer) remoteDataDirectory.getBlobContainer();
-            final Path destinationFilePath = destinationPath.resolve(source);
-            final ActionListener<String> completionListener = ActionListener.wrap(response -> {
-                fileTransferTracker.addTransferredBytesSucceeded(fileLength, startTime);
-                fileCompletionListener.onResponse(response);
-            }, e -> {
-                fileTransferTracker.addTransferredBytesFailed(fileLength, startTime);
-                fileCompletionListener.onFailure(e);
-            });
-            final ReadContextListener readContextListener = new ReadContextListener(
-                blobName,
-                destinationFilePath,
-                completionListener,
-                threadPool,
-                remoteDataDirectory.getDownloadRateLimiter(),
-                recoverySettings.getMaxConcurrentRemoteStoreStreams()
-            );
-            blobContainer.readBlobAsync(blobName, readContextListener);
-        } else {
-            // Fallback to older mechanism of downloading the file
-            ActionListener.completeWith(fileCompletionListener, () -> {
-                destinationDirectory.copyFrom(this, source, source, IOContext.DEFAULT);
-                return source;
-            });
-        }
-    }
-
-    /**
      * This acquires a lock on a given commit by creating a lock file in lock directory using {@code FileLockInfo}
      *
      * @param primaryTerm Primary Term of index at the time of commit.
@@ -704,6 +637,10 @@ public final class RemoteSegmentStoreDirectory extends FilterDirectory implement
                 tryAndDeleteLocalFile(metadataFilename, storeDirectory);
             }
         }
+    }
+
+    public RecoverySettings getRecoverySettings() {
+        return recoverySettings;
     }
 
     /**

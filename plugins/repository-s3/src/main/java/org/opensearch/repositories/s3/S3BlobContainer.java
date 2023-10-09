@@ -70,14 +70,12 @@ import org.opensearch.ExceptionsHelper;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.SetOnce;
 import org.opensearch.common.StreamContext;
-import org.opensearch.common.annotation.ExperimentalApi;
 import org.opensearch.common.blobstore.AsyncMultiStreamBlobContainer;
 import org.opensearch.common.blobstore.BlobContainer;
 import org.opensearch.common.blobstore.BlobMetadata;
 import org.opensearch.common.blobstore.BlobPath;
 import org.opensearch.common.blobstore.BlobStoreException;
 import org.opensearch.common.blobstore.DeleteResult;
-import org.opensearch.common.blobstore.stream.read.ReadContext;
 import org.opensearch.common.blobstore.stream.write.WriteContext;
 import org.opensearch.common.blobstore.stream.write.WritePriority;
 import org.opensearch.common.blobstore.support.AbstractBlobContainer;
@@ -219,52 +217,6 @@ class S3BlobContainer extends AbstractBlobContainer implements AsyncMultiStreamB
         } catch (Exception e) {
             logger.info("exception error from blob container for file {}", writeContext.getFileName());
             throw new IOException(e);
-        }
-    }
-
-    @ExperimentalApi
-    @Override
-    public void readBlobAsync(String blobName, ActionListener<ReadContext> listener) {
-        try (AmazonAsyncS3Reference amazonS3Reference = SocketAccess.doPrivileged(blobStore::asyncClientReference)) {
-            final S3AsyncClient s3AsyncClient = amazonS3Reference.get().client();
-            final String bucketName = blobStore.bucket();
-            final String blobKey = buildKey(blobName);
-
-            final CompletableFuture<GetObjectAttributesResponse> blobMetadataFuture = getBlobMetadata(s3AsyncClient, bucketName, blobKey);
-
-            blobMetadataFuture.whenComplete((blobMetadata, throwable) -> {
-                if (throwable != null) {
-                    Exception ex = throwable.getCause() instanceof Exception
-                        ? (Exception) throwable.getCause()
-                        : new Exception(throwable.getCause());
-                    listener.onFailure(ex);
-                    return;
-                }
-
-                try {
-                    final List<ReadContext.StreamPartCreator> blobPartInputStreamFutures = new ArrayList<>();
-                    final long blobSize = blobMetadata.objectSize();
-                    final Integer numberOfParts = blobMetadata.objectParts() == null ? null : blobMetadata.objectParts().totalPartsCount();
-                    final String blobChecksum = blobMetadata.checksum() == null ? null : blobMetadata.checksum().checksumCRC32();
-
-                    if (numberOfParts == null) {
-                        blobPartInputStreamFutures.add(() -> getBlobPartInputStreamContainer(s3AsyncClient, bucketName, blobKey, null));
-                    } else {
-                        // S3 multipart files use 1 to n indexing
-                        for (int partNumber = 1; partNumber <= numberOfParts; partNumber++) {
-                            final int innerPartNumber = partNumber;
-                            blobPartInputStreamFutures.add(
-                                () -> getBlobPartInputStreamContainer(s3AsyncClient, bucketName, blobKey, innerPartNumber)
-                            );
-                        }
-                    }
-                    listener.onResponse(new ReadContext(blobSize, blobPartInputStreamFutures, blobChecksum));
-                } catch (Exception ex) {
-                    listener.onFailure(ex);
-                }
-            });
-        } catch (Exception ex) {
-            listener.onFailure(SdkException.create("Error occurred while fetching blob parts from the repository", ex));
         }
     }
 
