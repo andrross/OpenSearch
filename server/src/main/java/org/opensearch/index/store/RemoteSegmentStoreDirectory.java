@@ -40,6 +40,7 @@ import org.opensearch.index.store.remote.metadata.RemoteSegmentMetadata;
 import org.opensearch.index.store.remote.metadata.RemoteSegmentMetadataHandler;
 import org.opensearch.indices.recovery.RecoverySettings;
 import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
+import org.opensearch.indices.replication.common.ReplicationLuceneIndex;
 import org.opensearch.threadpool.ThreadPool;
 
 import java.io.FileNotFoundException;
@@ -59,6 +60,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -499,6 +501,17 @@ public final class RemoteSegmentStoreDirectory extends FilterDirectory implement
         DirectoryFileTransferTracker fileTransferTracker,
         ActionListener<String> fileCompletionListener
     ) {
+        copyTo(source, destinationDirectory, destinationPath, fileTransferTracker, fileCompletionListener, b -> {});
+    }
+
+    public void copyTo(
+        String source,
+        Directory destinationDirectory,
+        Path destinationPath,
+        DirectoryFileTransferTracker fileTransferTracker,
+        ActionListener<String> fileCompletionListener,
+        Consumer<Long> byteAccumulator
+    ) {
         final String blobName = getExistingRemoteFilename(source);
         if (destinationPath != null && remoteDataDirectory.getBlobContainer() instanceof AsyncMultiStreamBlobContainer) {
             long length = 0L;
@@ -525,7 +538,8 @@ public final class RemoteSegmentStoreDirectory extends FilterDirectory implement
                 completionListener,
                 threadPool,
                 remoteDataDirectory.getDownloadRateLimiter(),
-                recoverySettings.getMaxConcurrentRemoteStoreStreams()
+                recoverySettings.getMaxConcurrentRemoteStoreStreams(),
+                byteAccumulator
             );
             blobContainer.readBlobAsync(blobName, readContextListener);
         } else {

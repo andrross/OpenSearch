@@ -17,6 +17,7 @@ import org.opensearch.common.UUIDs;
 import org.opensearch.common.annotation.InternalApi;
 import org.opensearch.common.blobstore.stream.read.ReadContext;
 import org.opensearch.core.action.ActionListener;
+import org.opensearch.indices.replication.common.ReplicationLuceneIndex;
 import org.opensearch.threadpool.ThreadPool;
 
 import java.io.IOException;
@@ -29,6 +30,7 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 
 /**
@@ -47,6 +49,7 @@ public class ReadContextListener implements ActionListener<ReadContext> {
     private final ThreadPool threadPool;
     private final UnaryOperator<InputStream> rateLimiter;
     private final int maxConcurrentStreams;
+    private final Consumer<Long> byteAccumulator;
 
     public ReadContextListener(
         String blobName,
@@ -56,6 +59,17 @@ public class ReadContextListener implements ActionListener<ReadContext> {
         UnaryOperator<InputStream> rateLimiter,
         int maxConcurrentStreams
     ) {
+        this(blobName, fileLocation, completionListener, threadPool, rateLimiter, maxConcurrentStreams, b -> {});
+    }
+    public ReadContextListener(
+        String blobName,
+        Path fileLocation,
+        ActionListener<String> completionListener,
+        ThreadPool threadPool,
+        UnaryOperator<InputStream> rateLimiter,
+        int maxConcurrentStreams,
+        Consumer<Long> byteAccumulator
+    ) {
         this.blobName = blobName;
         this.fileLocation = fileLocation;
         this.completionListener = completionListener;
@@ -64,6 +78,7 @@ public class ReadContextListener implements ActionListener<ReadContext> {
         this.maxConcurrentStreams = maxConcurrentStreams;
         this.tmpFileName = DOWNLOAD_PREFIX + UUIDs.randomBase64UUID() + "." + blobName;
         this.tmpFileLocation = fileLocation.getParent().resolve(tmpFileName);
+        this.byteAccumulator = byteAccumulator;
     }
 
     @Override
@@ -74,12 +89,14 @@ public class ReadContextListener implements ActionListener<ReadContext> {
         final GroupedActionListener<String> groupedListener = new GroupedActionListener<>(getFileCompletionListener(), numParts);
         final Queue<ReadContext.StreamPartCreator> queue = new ConcurrentLinkedQueue<>(readContext.getPartStreams());
         final StreamPartProcessor processor = new StreamPartProcessor(
+            blobName,
             queue,
             anyPartStreamFailed,
             tmpFileLocation,
             groupedListener,
             threadPool.executor(ThreadPool.Names.REMOTE_RECOVERY),
-            rateLimiter
+            rateLimiter,
+            byteAccumulator
         );
         for (int i = 0; i < Math.min(maxConcurrentStreams, queue.size()); i++) {
             processor.process(queue.poll());
@@ -126,27 +143,33 @@ public class ReadContextListener implements ActionListener<ReadContext> {
         private static final RuntimeException CANCELED_PART_EXCEPTION = new RuntimeException(
             "Canceled part download due to previous failure"
         );
+        private final String blobName;
         private final Queue<ReadContext.StreamPartCreator> queue;
         private final AtomicBoolean anyPartStreamFailed;
         private final Path fileLocation;
         private final GroupedActionListener<String> completionListener;
         private final Executor executor;
         private final UnaryOperator<InputStream> rateLimiter;
+        private final Consumer<Long> byteAccumulator;
 
         private StreamPartProcessor(
+            String blobName,
             Queue<ReadContext.StreamPartCreator> queue,
             AtomicBoolean anyPartStreamFailed,
             Path fileLocation,
             GroupedActionListener<String> completionListener,
             Executor executor,
-            UnaryOperator<InputStream> rateLimiter
+            UnaryOperator<InputStream> rateLimiter,
+            Consumer<Long> byteAccumulator
         ) {
+            this.blobName = blobName;
             this.queue = queue;
             this.anyPartStreamFailed = anyPartStreamFailed;
             this.fileLocation = fileLocation;
             this.completionListener = completionListener;
             this.executor = executor;
             this.rateLimiter = rateLimiter;
+            this.byteAccumulator = byteAccumulator;
         }
 
         private void process(ReadContext.StreamPartCreator supplier) {
@@ -161,6 +184,7 @@ public class ReadContextListener implements ActionListener<ReadContext> {
                 } else {
                     try {
                         FilePartWriter.write(fileLocation, blobPartStreamContainer, rateLimiter);
+                        byteAccumulator.accept(blobPartStreamContainer.getContentLength());
                         completionListener.onResponse(fileLocation.toString());
 
                         // Upon successfully completing a file part, pull another

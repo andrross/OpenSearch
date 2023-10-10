@@ -4936,7 +4936,11 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         final DirectoryFileTransferTracker fileTransferTracker = store.getDirectoryFileTransferTracker();
         for (String segment : toDownloadSegments) {
             final PlainActionFuture<String> segmentListener = PlainActionFuture.newFuture();
-            sourceRemoteDirectory.copyTo(segment, storeDirectory, indexPath, fileTransferTracker, segmentListener);
+            sourceRemoteDirectory.copyTo(segment, storeDirectory, indexPath, fileTransferTracker, segmentListener, b -> {
+                if (recoveryState.getIndex().getFileDetails(segment) != null) {
+                    recoveryState().getIndex().addRecoveredBytesToFile(segment, b);
+                }
+            });
             segmentListener.actionGet();
             onFileSync.run();
             if (targetRemoteDirectory != null) {
