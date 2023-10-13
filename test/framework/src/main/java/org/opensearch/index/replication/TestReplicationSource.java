@@ -8,6 +8,7 @@
 
 package org.opensearch.index.replication;
 
+import org.opensearch.common.util.CancellableThreads;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.index.shard.IndexShard;
 import org.opensearch.index.store.StoreFileMetadata;
@@ -32,14 +33,17 @@ public abstract class TestReplicationSource implements SegmentReplicationSource 
     );
 
     @Override
-    public abstract void getSegmentFiles(
+    public void getSegmentFiles(
+        CancellableThreads cancellableThreads,
         long replicationId,
         ReplicationCheckpoint checkpoint,
         List<StoreFileMetadata> filesToFetch,
         IndexShard indexShard,
         BiConsumer<String, Long> fileProgressTracker,
         ActionListener<GetSegmentFilesResponse> listener
-    );
+    ) {
+        throw new AssertionError("Not intended to be reachable");
+    }
 
     @Override
     public String getDescription() {

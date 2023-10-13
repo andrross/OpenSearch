@@ -84,6 +84,7 @@ public class SegmentReplicationWithNodeToNodeIndexShardTests extends SegmentRepl
 
                 @Override
                 public void getSegmentFiles(
+                    CancellableThreads cancellableThreads,
                     long replicationId,
                     ReplicationCheckpoint checkpoint,
                     List<StoreFileMetadata> filesToFetch,
@@ -126,18 +127,6 @@ public class SegmentReplicationWithNodeToNodeIndexShardTests extends SegmentRepl
                     targetService.beforeIndexShardClosed(replica.shardId, replica, Settings.EMPTY);
                     resolveCheckpointInfoResponseListener(listener, primary);
                 }
-
-                @Override
-                public void getSegmentFiles(
-                    long replicationId,
-                    ReplicationCheckpoint checkpoint,
-                    List<StoreFileMetadata> filesToFetch,
-                    IndexShard indexShard,
-                    BiConsumer<String, Long> fileProgressTracker,
-                    ActionListener<GetSegmentFilesResponse> listener
-                ) {
-                    Assert.fail("Should not be reached");
-                }
             };
             when(sourceFactory.get(any())).thenReturn(source);
             startReplicationAndAssertCancellation(replica, primary, targetService);
@@ -171,18 +160,6 @@ public class SegmentReplicationWithNodeToNodeIndexShardTests extends SegmentRepl
                     this.listener = listener;
                     // shard is closing while we are copying files.
                     targetService.beforeIndexShardClosed(replica.shardId, replica, Settings.EMPTY);
-                }
-
-                @Override
-                public void getSegmentFiles(
-                    long replicationId,
-                    ReplicationCheckpoint checkpoint,
-                    List<StoreFileMetadata> filesToFetch,
-                    IndexShard indexShard,
-                    BiConsumer<String, Long> fileProgressTracker,
-                    ActionListener<GetSegmentFilesResponse> listener
-                ) {
-                    Assert.fail("Unreachable");
                 }
 
                 @Override
@@ -223,6 +200,7 @@ public class SegmentReplicationWithNodeToNodeIndexShardTests extends SegmentRepl
 
                 @Override
                 public void getSegmentFiles(
+                    CancellableThreads cancellableThreads,
                     long replicationId,
                     ReplicationCheckpoint checkpoint,
                     List<StoreFileMetadata> filesToFetch,
@@ -270,6 +248,7 @@ public class SegmentReplicationWithNodeToNodeIndexShardTests extends SegmentRepl
 
                 @Override
                 public void getSegmentFiles(
+                    CancellableThreads cancellableThreads,
                     long replicationId,
                     ReplicationCheckpoint checkpoint,
                     List<StoreFileMetadata> filesToFetch,

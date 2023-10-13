@@ -28,6 +28,7 @@ import org.opensearch.ExceptionsHelper;
 import org.opensearch.OpenSearchCorruptionException;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.common.util.CancellableThreads;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.index.IndexSettings;
@@ -67,6 +68,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class SegmentReplicationTargetTests extends IndexShardTestCase {
+    private final CancellableThreads cancellableThreads = new CancellableThreads();
 
     private SegmentReplicationTarget segrepTarget;
     private IndexShard indexShard, spyIndexShard;
@@ -129,6 +131,7 @@ public class SegmentReplicationTargetTests extends IndexShardTestCase {
 
             @Override
             public void getSegmentFiles(
+                CancellableThreads cancellableThreads,
                 long replicationId,
                 ReplicationCheckpoint checkpoint,
                 List<StoreFileMetadata> filesToFetch,
@@ -195,6 +198,7 @@ public class SegmentReplicationTargetTests extends IndexShardTestCase {
 
             @Override
             public void getSegmentFiles(
+                CancellableThreads cancellableThreads,
                 long replicationId,
                 ReplicationCheckpoint checkpoint,
                 List<StoreFileMetadata> filesToFetch,
@@ -248,6 +252,7 @@ public class SegmentReplicationTargetTests extends IndexShardTestCase {
 
             @Override
             public void getSegmentFiles(
+                CancellableThreads cancellableThreads,
                 long replicationId,
                 ReplicationCheckpoint checkpoint,
                 List<StoreFileMetadata> filesToFetch,
@@ -301,6 +306,7 @@ public class SegmentReplicationTargetTests extends IndexShardTestCase {
 
             @Override
             public void getSegmentFiles(
+                CancellableThreads cancellableThreads,
                 long replicationId,
                 ReplicationCheckpoint checkpoint,
                 List<StoreFileMetadata> filesToFetch,
@@ -348,6 +354,7 @@ public class SegmentReplicationTargetTests extends IndexShardTestCase {
 
             @Override
             public void getSegmentFiles(
+                CancellableThreads cancellableThreads,
                 long replicationId,
                 ReplicationCheckpoint checkpoint,
                 List<StoreFileMetadata> filesToFetch,
@@ -393,6 +400,7 @@ public class SegmentReplicationTargetTests extends IndexShardTestCase {
 
             @Override
             public void getSegmentFiles(
+                CancellableThreads cancellableThreads,
                 long replicationId,
                 ReplicationCheckpoint checkpoint,
                 List<StoreFileMetadata> filesToFetch,
@@ -455,6 +463,7 @@ public class SegmentReplicationTargetTests extends IndexShardTestCase {
 
             @Override
             public void getSegmentFiles(
+                CancellableThreads cancellableThreads,
                 long replicationId,
                 ReplicationCheckpoint checkpoint,
                 List<StoreFileMetadata> filesToFetch,

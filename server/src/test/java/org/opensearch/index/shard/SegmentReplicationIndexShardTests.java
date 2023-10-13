@@ -722,6 +722,7 @@ public class SegmentReplicationIndexShardTests extends OpenSearchIndexLevelRepli
 
                 @Override
                 public void getSegmentFiles(
+                    CancellableThreads cancellableThreads,
                     long replicationId,
                     ReplicationCheckpoint checkpoint,
                     List<StoreFileMetadata> filesToFetch,

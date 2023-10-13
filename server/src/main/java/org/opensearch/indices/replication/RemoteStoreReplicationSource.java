@@ -15,6 +15,7 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FilterDirectory;
 import org.apache.lucene.util.Version;
 import org.opensearch.common.concurrent.GatedCloseable;
+import org.opensearch.common.util.CancellableThreads;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.index.shard.IndexShard;
 import org.opensearch.index.shard.IndexShardState;
@@ -24,6 +25,7 @@ import org.opensearch.index.store.StoreFileMetadata;
 import org.opensearch.index.store.remote.metadata.RemoteSegmentMetadata;
 import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -92,6 +94,7 @@ public class RemoteStoreReplicationSource implements SegmentReplicationSource {
 
     @Override
     public void getSegmentFiles(
+        CancellableThreads cancellableThreads,
         long replicationId,
         ReplicationCheckpoint checkpoint,
         List<StoreFileMetadata> filesToFetch,
@@ -109,30 +112,23 @@ public class RemoteStoreReplicationSource implements SegmentReplicationSource {
             RemoteSegmentMetadata remoteSegmentMetadata = remoteDirectory.readLatestMetadataFile();
             Collection<String> directoryFiles = List.of(indexShard.store().directory().listAll());
             if (remoteSegmentMetadata != null) {
-                try {
-                    indexShard.store().incRef();
-                    indexShard.remoteStore().incRef();
-                    final Directory storeDirectory = indexShard.store().directory();
-                    final List<String> toDownloadSegmentNames = new ArrayList<>();
-                    for (StoreFileMetadata fileMetadata : filesToFetch) {
-                        String file = fileMetadata.name();
-                        assert directoryFiles.contains(file) == false : "Local store already contains the file " + file;
-                        toDownloadSegmentNames.add(file);
-                    }
-                    indexShard.getFileDownloader()
-                        .download(
-                            remoteDirectory,
-                            new ReplicationStatsDirectoryWrapper(storeDirectory, fileProgressTracker),
-                            toDownloadSegmentNames
-                        );
-                    logger.debug("Downloaded segment files from remote store {}", filesToFetch);
-                } finally {
-                    indexShard.store().decRef();
-                    indexShard.remoteStore().decRef();
+                final Directory storeDirectory = indexShard.store().directory();
+                final List<String> toDownloadSegmentNames = new ArrayList<>();
+                for (StoreFileMetadata fileMetadata : filesToFetch) {
+                    String file = fileMetadata.name();
+                    assert directoryFiles.contains(file) == false : "Local store already contains the file " + file;
+                    toDownloadSegmentNames.add(file);
                 }
+                indexShard.getFileDownloader()
+                    .downloadAsync(
+                        cancellableThreads,
+                        remoteDirectory,
+                        new ReplicationStatsDirectoryWrapper(storeDirectory, fileProgressTracker),
+                        toDownloadSegmentNames,
+                        ActionListener.map(listener, r -> new GetSegmentFilesResponse(filesToFetch))
+                    );
             }
-            listener.onResponse(new GetSegmentFilesResponse(filesToFetch));
-        } catch (Exception e) {
+        } catch (IOException | RuntimeException e) {
             listener.onFailure(e);
         }
     }

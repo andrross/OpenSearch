@@ -171,6 +171,7 @@ public class SegmentReplicationTarget extends ReplicationTarget {
             state.setStage(SegmentReplicationState.Stage.GET_FILES);
             cancellableThreads.checkForCancel();
             source.getSegmentFiles(
+                cancellableThreads,
                 getId(),
                 checkpointInfo.getCheckpoint(),
                 filesToFetch,

@@ -11,6 +11,7 @@ package org.opensearch.indices.replication;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.opensearch.cluster.node.DiscoveryNode;
+import org.opensearch.common.util.CancellableThreads;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.io.stream.Writeable;
 import org.opensearch.index.shard.IndexShard;
@@ -77,6 +78,7 @@ public class PrimaryShardReplicationSource implements SegmentReplicationSource {
 
     @Override
     public void getSegmentFiles(
+        CancellableThreads cancellableThreads,
         long replicationId,
         ReplicationCheckpoint checkpoint,
         List<StoreFileMetadata> filesToFetch,

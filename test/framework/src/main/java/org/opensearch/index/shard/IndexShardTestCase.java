@@ -71,6 +71,7 @@ import org.opensearch.common.lucene.uid.Versions;
 import org.opensearch.common.settings.ClusterSettings;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.util.BigArrays;
+import org.opensearch.common.util.CancellableThreads;
 import org.opensearch.common.util.io.IOUtils;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.bytes.BytesArray;
@@ -1617,6 +1618,7 @@ public abstract class IndexShardTestCase extends OpenSearchTestCase {
 
             @Override
             public void getSegmentFiles(
+                CancellableThreads cancellableThreads,
                 long replicationId,
                 ReplicationCheckpoint checkpoint,
                 List<StoreFileMetadata> filesToFetch,

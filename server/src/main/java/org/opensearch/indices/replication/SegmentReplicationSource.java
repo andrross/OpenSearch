@@ -12,6 +12,7 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FilterDirectory;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexInput;
+import org.opensearch.common.util.CancellableThreads;
 import org.opensearch.common.util.CancellableThreads.ExecutionCancelledException;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.index.shard.IndexShard;
@@ -49,6 +50,7 @@ public interface SegmentReplicationSource {
      * @param listener      {@link ActionListener} Listener that completes with the list of files copied.
      */
     void getSegmentFiles(
+        CancellableThreads cancellableThreads,
         long replicationId,
         ReplicationCheckpoint checkpoint,
         List<StoreFileMetadata> filesToFetch,

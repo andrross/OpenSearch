@@ -12,6 +12,7 @@ import org.apache.lucene.store.FilterDirectory;
 import org.opensearch.action.support.PlainActionFuture;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.common.util.CancellableThreads;
 import org.opensearch.index.engine.InternalEngineFactory;
 import org.opensearch.index.engine.NRTReplicationEngineFactory;
 import org.opensearch.index.replication.OpenSearchIndexLevelReplicationTestCase;
@@ -36,6 +37,7 @@ import static org.mockito.Mockito.when;
 
 public class RemoteStoreReplicationSourceTests extends OpenSearchIndexLevelReplicationTestCase {
     private static final long REPLICATION_ID = 123L;
+    private final CancellableThreads cancellableThreads = new CancellableThreads();
     private RemoteStoreReplicationSource replicationSource;
     private IndexShard primaryShard;
 
@@ -90,7 +92,15 @@ public class RemoteStoreReplicationSourceTests extends OpenSearchIndexLevelRepli
         List<StoreFileMetadata> filesToFetch = primaryShard.getSegmentMetadataMap().values().stream().collect(Collectors.toList());
         final PlainActionFuture<GetSegmentFilesResponse> res = PlainActionFuture.newFuture();
         replicationSource = new RemoteStoreReplicationSource(primaryShard);
-        replicationSource.getSegmentFiles(REPLICATION_ID, checkpoint, filesToFetch, replicaShard, (fileName, bytesRecovered) -> {}, res);
+        replicationSource.getSegmentFiles(
+            cancellableThreads,
+            REPLICATION_ID,
+            checkpoint,
+            filesToFetch,
+            replicaShard,
+            (fileName, bytesRecovered) -> {},
+            res
+        );
         GetSegmentFilesResponse response = res.get();
         assertEquals(response.files.size(), filesToFetch.size());
         assertTrue(response.files.containsAll(filesToFetch));
@@ -105,6 +115,7 @@ public class RemoteStoreReplicationSourceTests extends OpenSearchIndexLevelRepli
             final PlainActionFuture<GetSegmentFilesResponse> res = PlainActionFuture.newFuture();
             replicationSource = new RemoteStoreReplicationSource(primaryShard);
             replicationSource.getSegmentFiles(
+                cancellableThreads,
                 REPLICATION_ID,
                 checkpoint,
                 filesToFetch,
@@ -126,6 +137,7 @@ public class RemoteStoreReplicationSourceTests extends OpenSearchIndexLevelRepli
         final PlainActionFuture<GetSegmentFilesResponse> res = PlainActionFuture.newFuture();
         replicationSource = new RemoteStoreReplicationSource(primaryShard);
         replicationSource.getSegmentFiles(
+            cancellableThreads,
             REPLICATION_ID,
             checkpoint,
             Collections.emptyList(),

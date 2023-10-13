@@ -206,18 +206,6 @@ public class SegmentReplicationTargetServiceTests extends IndexShardTestCase {
             ) {
                 listener.onFailure(expectedError);
             }
-
-            @Override
-            public void getSegmentFiles(
-                long replicationId,
-                ReplicationCheckpoint checkpoint,
-                List<StoreFileMetadata> filesToFetch,
-                IndexShard indexShard,
-                BiConsumer<String, Long> fileProgressTracker,
-                ActionListener<GetSegmentFilesResponse> listener
-            ) {
-                Assert.fail("Should not be called");
-            }
         };
         final SegmentReplicationTarget target = new SegmentReplicationTarget(
             replicaShard,
@@ -275,6 +263,7 @@ public class SegmentReplicationTargetServiceTests extends IndexShardTestCase {
 
             @Override
             public void getSegmentFiles(
+                CancellableThreads cancellableThreads,
                 long replicationId,
                 ReplicationCheckpoint checkpoint,
                 List<StoreFileMetadata> filesToFetch,
@@ -329,18 +318,6 @@ public class SegmentReplicationTargetServiceTests extends IndexShardTestCase {
                 this.listener = listener;
                 latch.countDown();
                 // do not resolve this listener yet, wait for cancel to hit.
-            }
-
-            @Override
-            public void getSegmentFiles(
-                long replicationId,
-                ReplicationCheckpoint checkpoint,
-                List<StoreFileMetadata> filesToFetch,
-                IndexShard indexShard,
-                BiConsumer<String, Long> fileProgressTracker,
-                ActionListener<GetSegmentFilesResponse> listener
-            ) {
-                Assert.fail("Unreachable");
             }
 
             @Override

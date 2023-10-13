@@ -14,6 +14,7 @@ import org.apache.lucene.util.Version;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.common.concurrent.GatedCloseable;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.common.util.CancellableThreads;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.index.engine.DocIdSeqNoAndSource;
 import org.opensearch.index.engine.Engine;
@@ -385,6 +386,7 @@ public class RemoteIndexShardTests extends SegmentReplicationIndexShardTests {
 
                 @Override
                 public void getSegmentFiles(
+                    CancellableThreads cancellableThreads,
                     long replicationId,
                     ReplicationCheckpoint checkpoint,
                     List<StoreFileMetadata> filesToFetch,
@@ -392,7 +394,15 @@ public class RemoteIndexShardTests extends SegmentReplicationIndexShardTests {
                     BiConsumer<String, Long> fileProgressTracker,
                     ActionListener<GetSegmentFilesResponse> listener
                 ) {
-                    super.getSegmentFiles(replicationId, checkpoint, filesToFetch, indexShard, (fileName, bytesRecovered) -> {}, listener);
+                    super.getSegmentFiles(
+                        cancellableThreads,
+                        replicationId,
+                        checkpoint,
+                        filesToFetch,
+                        indexShard,
+                        (fileName, bytesRecovered) -> {},
+                        listener
+                    );
                     runAfterGetFiles[index.getAndIncrement()].run();
                 }
 

@@ -44,6 +44,8 @@ public class PrimaryShardReplicationSourceTests extends IndexShardTestCase {
     private static final long VERSION = 4L;
     private static final long REPLICATION_ID = 123L;
 
+    private final CancellableThreads cancellableThreads = new CancellableThreads();
+
     private CapturingTransport transport;
     private ClusterService clusterService;
     private TransportService transportService;
@@ -121,6 +123,7 @@ public class PrimaryShardReplicationSourceTests extends IndexShardTestCase {
         );
         StoreFileMetadata testMetadata = new StoreFileMetadata("testFile", 1L, "checksum", Version.LATEST);
         replicationSource.getSegmentFiles(
+            cancellableThreads,
             REPLICATION_ID,
             checkpoint,
             Arrays.asList(testMetadata),
@@ -150,6 +153,7 @@ public class PrimaryShardReplicationSourceTests extends IndexShardTestCase {
         );
         StoreFileMetadata testMetadata = new StoreFileMetadata("testFile", fileSize, "checksum", Version.LATEST);
         replicationSource.getSegmentFiles(
+            cancellableThreads,
             REPLICATION_ID,
             checkpoint,
             Arrays.asList(testMetadata),
@@ -176,6 +180,7 @@ public class PrimaryShardReplicationSourceTests extends IndexShardTestCase {
         );
         StoreFileMetadata testMetadata = new StoreFileMetadata("testFile", 1L, "checksum", Version.LATEST);
         replicationSource.getSegmentFiles(
+            cancellableThreads,
             REPLICATION_ID,
             checkpoint,
             Arrays.asList(testMetadata),
