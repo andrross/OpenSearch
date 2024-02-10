@@ -40,6 +40,7 @@ import org.opensearch.index.shard.IndexShardTestCase;
 import org.opensearch.index.store.lockmanager.RemoteStoreMetadataLockManager;
 import org.opensearch.index.store.remote.metadata.RemoteSegmentMetadata;
 import org.opensearch.index.store.remote.metadata.RemoteSegmentMetadataHandler;
+import org.opensearch.indices.recovery.DefaultRecoverySettings;
 import org.opensearch.indices.replication.common.ReplicationType;
 import org.opensearch.threadpool.ThreadPool;
 import org.junit.After;
@@ -152,7 +153,8 @@ public class RemoteSegmentStoreDirectoryTests extends IndexShardTestCase {
             remoteMetadataDirectory,
             mdLockManager,
             threadPool,
-            indexShard.shardId()
+            indexShard.shardId(),
+            DefaultRecoverySettings.INSTANCE
         );
         try (Store store = indexShard.store()) {
             segmentInfos = store.readLastCommittedSegmentsInfo();
@@ -576,7 +578,8 @@ public class RemoteSegmentStoreDirectoryTests extends IndexShardTestCase {
             remoteMetadataDirectory,
             mdLockManager,
             threadPool,
-            indexShard.shardId()
+            indexShard.shardId(),
+            DefaultRecoverySettings.INSTANCE
         );
 
         populateMetadata();
