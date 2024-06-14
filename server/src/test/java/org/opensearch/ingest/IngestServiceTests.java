@@ -1129,17 +1129,29 @@ public class IngestServiceTests extends OpenSearchTestCase {
             bulkRequest.add(request);
         }
 
-        CompoundProcessor processor = mock(CompoundProcessor.class);
-        when(processor.getProcessors()).thenReturn(Collections.singletonList(mock(Processor.class)));
-        Exception error = new RuntimeException();
-        doAnswer(args -> {
-            @SuppressWarnings("unchecked")
-            BiConsumer<IngestDocument, Exception> handler = (BiConsumer) args.getArguments()[1];
-            handler.accept(null, error);
-            return null;
-        }).when(processor).execute(any(), any());
-        IngestService ingestService = createWithProcessors(
-            Collections.singletonMap("mock", (factories, tag, description, config) -> processor)
+        final RuntimeException expectedException = new RuntimeException("injected exception");
+        final IngestService ingestService = createWithProcessors(Map.of("mock",
+            (factories, tag, description, config) -> new CompoundProcessor(new Processor() {
+                @Override
+                public IngestDocument execute(IngestDocument ingestDocument) {
+                    throw expectedException;
+                }
+
+                @Override
+                public String getType() {
+                    return "mock";
+                }
+
+                @Override
+                public String getTag() {
+                    return "mockTag";
+                }
+
+                @Override
+                public String getDescription() {
+                    return null;
+                }
+            }))
         );
         PutPipelineRequest putRequest = new PutPipelineRequest(
             "_id",
@@ -1165,7 +1177,7 @@ public class IngestServiceTests extends OpenSearchTestCase {
             bulkRequest
         );
 
-        verify(requestItemErrorHandler, times(numIndexRequests)).accept(anyInt(), argThat(o -> o.getCause().equals(error)));
+        verify(requestItemErrorHandler, times(numIndexRequests)).accept(anyInt(), argThat(o -> o.getCause() == expectedException));
 
         verify(completionHandler, times(1)).accept(Thread.currentThread(), null);
     }
@@ -1187,17 +1199,28 @@ public class IngestServiceTests extends OpenSearchTestCase {
             bulkRequest.add(indexRequest);
         }
 
-        final Processor processor = mock(Processor.class);
-        when(processor.getType()).thenReturn("mock");
-        when(processor.getTag()).thenReturn("mockTag");
-        doAnswer(args -> {
-            @SuppressWarnings("unchecked")
-            BiConsumer<IngestDocument, Exception> handler = (BiConsumer) args.getArguments()[1];
-            handler.accept(RandomDocumentPicks.randomIngestDocument(random()), null);
-            return null;
-        }).when(processor).execute(any(), any());
         Map<String, Processor.Factory> map = new HashMap<>(2);
-        map.put("mock", (factories, tag, description, config) -> processor);
+        map.put("mock", (factories, tag, description, config) -> new Processor() {
+            @Override
+            public IngestDocument execute(IngestDocument ingestDocument) {
+                return RandomDocumentPicks.randomIngestDocument(random());
+            }
+
+            @Override
+            public String getType() {
+                return "mock";
+            }
+
+            @Override
+            public String getTag() {
+                return "mockTag";
+            }
+
+            @Override
+            public String getDescription() {
+                return null;
+            }
+        });
 
         IngestService ingestService = createWithProcessors(map);
         PutPipelineRequest putRequest = new PutPipelineRequest(
