@@ -118,7 +118,6 @@ import static org.mockito.Mockito.argThat;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.eq;
-import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -135,7 +134,7 @@ public class IngestServiceTests extends OpenSearchTestCase {
     };
 
     private ThreadPool threadPool;
-    private BulkRequest mockBulkRequest;
+    private int defaultBatchSize = Integer.MAX_VALUE;
 
     @Before
     public void setup() {
@@ -143,8 +142,6 @@ public class IngestServiceTests extends OpenSearchTestCase {
         ExecutorService executorService = OpenSearchExecutors.newDirectExecutorService();
         when(threadPool.generic()).thenReturn(executorService);
         when(threadPool.executor(anyString())).thenReturn(executorService);
-        mockBulkRequest = mock(BulkRequest.class);
-        lenient().when(mockBulkRequest.batchSize()).thenReturn(1);
     }
 
     public void testIngestPlugin() {
@@ -217,7 +214,7 @@ public class IngestServiceTests extends OpenSearchTestCase {
             completionHandler,
             indexReq -> {},
             Names.WRITE,
-            new BulkRequest()
+            defaultBatchSize
         );
 
         assertTrue(failure.get());
@@ -769,7 +766,7 @@ public class IngestServiceTests extends OpenSearchTestCase {
             completionHandler,
             indexReq -> {},
             Names.WRITE,
-            bulkRequest
+            bulkRequest.effectiveBatchSize()
         );
 
         assertTrue(failure.get());
@@ -816,7 +813,7 @@ public class IngestServiceTests extends OpenSearchTestCase {
             completionHandler,
             indexReq -> {},
             Names.WRITE,
-            bulkRequest
+            bulkRequest.effectiveBatchSize()
         );
         verify(failureHandler, times(1)).accept(
             argThat((Integer item) -> item == 2),
@@ -853,7 +850,7 @@ public class IngestServiceTests extends OpenSearchTestCase {
             completionHandler,
             indexReq -> {},
             Names.WRITE,
-            mockBulkRequest
+            defaultBatchSize
         );
         verify(failureHandler, never()).accept(any(), any());
         verify(completionHandler, times(1)).accept(Thread.currentThread(), null);
@@ -885,7 +882,7 @@ public class IngestServiceTests extends OpenSearchTestCase {
             completionHandler,
             indexReq -> {},
             Names.WRITE,
-            mockBulkRequest
+            defaultBatchSize
         );
         verify(failureHandler, never()).accept(any(), any());
         verify(completionHandler, times(1)).accept(Thread.currentThread(), null);
@@ -945,7 +942,7 @@ public class IngestServiceTests extends OpenSearchTestCase {
             completionHandler,
             indexReq -> {},
             Names.WRITE,
-            mockBulkRequest
+            defaultBatchSize
         );
         verify(processor).execute(any(), any());
         verify(failureHandler, never()).accept(any(), any());
@@ -990,7 +987,7 @@ public class IngestServiceTests extends OpenSearchTestCase {
             completionHandler,
             indexReq -> {},
             Names.WRITE,
-            mockBulkRequest
+            defaultBatchSize
         );
         verify(processor).execute(eqIndexTypeId(indexRequest.version(), indexRequest.versionType(), emptyMap()), any());
         verify(failureHandler, times(1)).accept(eq(0), any(RuntimeException.class));
@@ -1049,7 +1046,7 @@ public class IngestServiceTests extends OpenSearchTestCase {
             completionHandler,
             indexReq -> {},
             Names.WRITE,
-            mockBulkRequest
+            defaultBatchSize
         );
         verify(failureHandler, never()).accept(eq(0), any(IngestProcessorException.class));
         verify(completionHandler, times(1)).accept(Thread.currentThread(), null);
@@ -1099,7 +1096,7 @@ public class IngestServiceTests extends OpenSearchTestCase {
             completionHandler,
             indexReq -> {},
             Names.WRITE,
-            mockBulkRequest
+            defaultBatchSize
         );
         verify(processor).execute(eqIndexTypeId(indexRequest.version(), indexRequest.versionType(), emptyMap()), any());
         verify(failureHandler, times(1)).accept(eq(0), any(RuntimeException.class));
@@ -1174,7 +1171,7 @@ public class IngestServiceTests extends OpenSearchTestCase {
             completionHandler,
             indexReq -> {},
             Names.WRITE,
-            bulkRequest
+            bulkRequest.effectiveBatchSize()
         );
 
         verify(requestItemErrorHandler, times(numIndexRequests)).accept(anyInt(), argThat(o -> o.getCause() == expectedException));
@@ -1244,7 +1241,7 @@ public class IngestServiceTests extends OpenSearchTestCase {
             completionHandler,
             indexReq -> {},
             Names.WRITE,
-            bulkRequest
+            bulkRequest.effectiveBatchSize()
         );
 
         verify(requestItemErrorHandler, never()).accept(any(), any());
@@ -1313,7 +1310,7 @@ public class IngestServiceTests extends OpenSearchTestCase {
             completionHandler,
             indexReq -> {},
             Names.WRITE,
-            mockBulkRequest
+            defaultBatchSize
         );
         final IngestStats afterFirstRequestStats = ingestService.stats();
         assertThat(afterFirstRequestStats.getPipelineStats().size(), equalTo(2));
@@ -1338,7 +1335,7 @@ public class IngestServiceTests extends OpenSearchTestCase {
             completionHandler,
             indexReq -> {},
             Names.WRITE,
-            mockBulkRequest
+            defaultBatchSize
         );
         final IngestStats afterSecondRequestStats = ingestService.stats();
         assertThat(afterSecondRequestStats.getPipelineStats().size(), equalTo(2));
@@ -1368,7 +1365,7 @@ public class IngestServiceTests extends OpenSearchTestCase {
             completionHandler,
             indexReq -> {},
             Names.WRITE,
-            mockBulkRequest
+            defaultBatchSize
         );
         final IngestStats afterThirdRequestStats = ingestService.stats();
         assertThat(afterThirdRequestStats.getPipelineStats().size(), equalTo(2));
@@ -1402,7 +1399,7 @@ public class IngestServiceTests extends OpenSearchTestCase {
             completionHandler,
             indexReq -> {},
             Names.WRITE,
-            mockBulkRequest
+            defaultBatchSize
         );
         final IngestStats afterForthRequestStats = ingestService.stats();
         assertThat(afterForthRequestStats.getPipelineStats().size(), equalTo(2));
@@ -1501,7 +1498,7 @@ public class IngestServiceTests extends OpenSearchTestCase {
             completionHandler,
             dropHandler,
             Names.WRITE,
-            bulkRequest
+            defaultBatchSize
         );
         verify(failureHandler, never()).accept(any(), any());
         verify(completionHandler, times(1)).accept(Thread.currentThread(), null);
@@ -1589,7 +1586,7 @@ public class IngestServiceTests extends OpenSearchTestCase {
                 (thread, e) -> {},
                 indexReq -> {},
                 Names.WRITE,
-                mockBulkRequest
+                defaultBatchSize
             );
         }
 
@@ -1745,7 +1742,7 @@ public class IngestServiceTests extends OpenSearchTestCase {
             completionHandler,
             indexReq -> {},
             Names.WRITE,
-            bulkRequest
+            bulkRequest.effectiveBatchSize()
         );
         verify(failureHandler, never()).accept(any(), any());
         verify(completionHandler, times(1)).accept(Thread.currentThread(), null);
@@ -1781,7 +1778,7 @@ public class IngestServiceTests extends OpenSearchTestCase {
             completionHandler,
             indexReq -> {},
             Names.WRITE,
-            bulkRequest
+            bulkRequest.effectiveBatchSize()
         );
         verify(failureHandler, never()).accept(any(), any());
         verify(completionHandler, times(1)).accept(Thread.currentThread(), null);
@@ -1810,7 +1807,7 @@ public class IngestServiceTests extends OpenSearchTestCase {
             completionHandler,
             indexReq -> {},
             Names.WRITE,
-            bulkRequest
+            bulkRequest.effectiveBatchSize()
         );
         verify(failureHandler, never()).accept(any(), any());
         verify(completionHandler, times(1)).accept(Thread.currentThread(), null);
@@ -1848,7 +1845,7 @@ public class IngestServiceTests extends OpenSearchTestCase {
             completionHandler,
             indexReq -> {},
             Names.WRITE,
-            bulkRequest
+            bulkRequest.effectiveBatchSize()
         );
         verify(failureHandler, never()).accept(any(), any());
         verify(completionHandler, times(1)).accept(Thread.currentThread(), null);
@@ -1878,7 +1875,7 @@ public class IngestServiceTests extends OpenSearchTestCase {
             completionHandler,
             indexReq -> {},
             Names.WRITE,
-            bulkRequest
+            bulkRequest.effectiveBatchSize()
         );
         verify(failureHandler, never()).accept(any(), any());
         verify(completionHandler, times(1)).accept(Thread.currentThread(), null);
@@ -1911,7 +1908,7 @@ public class IngestServiceTests extends OpenSearchTestCase {
             completionHandler,
             indexReq -> {},
             Names.WRITE,
-            bulkRequest
+            bulkRequest.effectiveBatchSize()
         );
         verify(failureHandler, times(2)).accept(any(), any());
         verify(completionHandler, times(1)).accept(Thread.currentThread(), null);
@@ -1957,7 +1954,7 @@ public class IngestServiceTests extends OpenSearchTestCase {
             completionHandler::put,
             dropHandler::add,
             Names.WRITE,
-            bulkRequest
+            bulkRequest.effectiveBatchSize()
         );
         assertEquals(Set.of(1), failureHandler.keySet());
         assertEquals(List.of(2), dropHandler);

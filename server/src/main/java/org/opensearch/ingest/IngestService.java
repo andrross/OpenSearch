@@ -514,7 +514,7 @@ public class IngestService implements ClusterStateApplier, ReportingService<Inge
         BiConsumer<Thread, Exception> onCompletion,
         IntConsumer onDropped,
         String executorName,
-        BulkRequest originalBulkRequest
+        int batchSize
     ) {
         threadPool.executor(executorName).execute(new AbstractRunnable() {
 
@@ -525,7 +525,7 @@ public class IngestService implements ClusterStateApplier, ReportingService<Inge
 
             @Override
             protected void doRun() {
-                runBulkRequestInBatch(numberOfActionRequests, actionRequests, onFailure, onCompletion, onDropped, originalBulkRequest);
+                runBulkRequestInBatch(numberOfActionRequests, actionRequests, onFailure, onCompletion, onDropped, batchSize);
             }
         });
     }
@@ -536,7 +536,7 @@ public class IngestService implements ClusterStateApplier, ReportingService<Inge
         BiConsumer<Integer, Exception> onFailure,
         BiConsumer<Thread, Exception> onCompletion,
         IntConsumer onDropped,
-        BulkRequest originalBulkRequest
+        int batchSize
     ) {
 
         final Thread originalThread = Thread.currentThread();
@@ -581,7 +581,6 @@ public class IngestService implements ClusterStateApplier, ReportingService<Inge
             i++;
         }
 
-        int batchSize = originalBulkRequest.effectiveBatchSize();
         List<List<IndexRequestWrapper>> batches = prepareBatches(batchSize, indexRequestWrappers);
         logger.debug("batchSize: {}, batches: {}", batchSize, batches.size());
 

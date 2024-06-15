@@ -347,7 +347,7 @@ public class TransportBulkActionIngestTests extends OpenSearchTestCase {
             completionHandler.capture(),
             any(),
             eq(Names.WRITE),
-            eq(bulkRequest)
+            eq(bulkRequest.effectiveBatchSize())
         );
         completionHandler.getValue().accept(null, exception);
         assertTrue(failureCalled.get());
@@ -385,7 +385,7 @@ public class TransportBulkActionIngestTests extends OpenSearchTestCase {
             completionHandler.capture(),
             any(),
             eq(Names.WRITE),
-            any()
+            anyInt()
         );
         completionHandler.getValue().accept(null, exception);
         assertTrue(failureCalled.get());
@@ -432,7 +432,7 @@ public class TransportBulkActionIngestTests extends OpenSearchTestCase {
             completionHandler.capture(),
             any(),
             eq(Names.SYSTEM_WRITE),
-            eq(bulkRequest)
+            eq(bulkRequest.effectiveBatchSize())
         );
         completionHandler.getValue().accept(null, exception);
         assertTrue(failureCalled.get());
@@ -463,7 +463,7 @@ public class TransportBulkActionIngestTests extends OpenSearchTestCase {
         action.execute(null, bulkRequest, listener);
 
         // should not have executed ingest locally
-        verify(ingestService, never()).executeBulkRequest(anyInt(), any(), any(), any(), any(), any(), any());
+        verify(ingestService, never()).executeBulkRequest(anyInt(), any(), any(), any(), any(), any(), anyInt());
         // but instead should have sent to a remote node with the transport service
         ArgumentCaptor<DiscoveryNode> node = ArgumentCaptor.forClass(DiscoveryNode.class);
         verify(transportService).sendRequest(node.capture(), eq(BulkAction.NAME), any(), remoteResponseHandler.capture());
@@ -503,7 +503,7 @@ public class TransportBulkActionIngestTests extends OpenSearchTestCase {
         singleItemBulkWriteAction.execute(null, indexRequest, listener);
 
         // should not have executed ingest locally
-        verify(ingestService, never()).executeBulkRequest(anyInt(), any(), any(), any(), any(), any(), any());
+        verify(ingestService, never()).executeBulkRequest(anyInt(), any(), any(), any(), any(), any(), anyInt());
         // but instead should have sent to a remote node with the transport service
         ArgumentCaptor<DiscoveryNode> node = ArgumentCaptor.forClass(DiscoveryNode.class);
         verify(transportService).sendRequest(node.capture(), eq(BulkAction.NAME), any(), remoteResponseHandler.capture());
@@ -590,7 +590,7 @@ public class TransportBulkActionIngestTests extends OpenSearchTestCase {
             completionHandler.capture(),
             any(),
             eq(Names.WRITE),
-            eq(bulkRequest)
+            eq(bulkRequest.effectiveBatchSize())
         );
         assertEquals(indexRequest1.getPipeline(), "default_pipeline");
         assertEquals(indexRequest2.getPipeline(), "default_pipeline");
@@ -634,7 +634,7 @@ public class TransportBulkActionIngestTests extends OpenSearchTestCase {
             completionHandler.capture(),
             any(),
             eq(Names.WRITE),
-            any()
+            anyInt()
         );
         completionHandler.getValue().accept(null, exception);
         assertFalse(action.indexCreated); // still no index yet, the ingest node failed.
@@ -722,7 +722,7 @@ public class TransportBulkActionIngestTests extends OpenSearchTestCase {
             completionHandler.capture(),
             any(),
             eq(Names.WRITE),
-            any()
+            anyInt()
         );
     }
 
@@ -762,7 +762,7 @@ public class TransportBulkActionIngestTests extends OpenSearchTestCase {
             completionHandler.capture(),
             any(),
             eq(Names.WRITE),
-            any()
+            anyInt()
         );
     }
 
@@ -788,7 +788,7 @@ public class TransportBulkActionIngestTests extends OpenSearchTestCase {
             completionHandler.capture(),
             any(),
             eq(Names.WRITE),
-            any()
+            anyInt()
         );
         assertEquals(indexRequest.getPipeline(), "default_pipeline");
         completionHandler.getValue().accept(null, exception);

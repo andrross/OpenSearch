@@ -373,7 +373,7 @@ public class BulkRequest extends ActionRequest implements CompositeIndicesReques
 
     public int effectiveBatchSize() {
         if (batchSize == 0) {
-            return requests.size();
+            return Integer.MAX_VALUE;
         } else {
             return batchSize;
         }
