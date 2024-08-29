@@ -46,6 +46,9 @@ import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.node.Node;
 
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -59,6 +62,8 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import com.google.protobuf.ByteString;
 
 import static org.opensearch.node.NodeRoleSettings.NODE_ROLES_SETTING;
 import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_CLUSTER_STATE_REPOSITORY_NAME_ATTRIBUTE_KEY;
@@ -332,28 +337,29 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
         int rolesSize = in.readVInt();
         final Set<DiscoveryNodeRole> roles = new HashSet<>(rolesSize);
         for (int i = 0; i < rolesSize; i++) {
-            final String roleName = in.readString();
-            final String roleNameAbbreviation = in.readString();
-            final boolean canContainData = in.readBoolean();
-            final DiscoveryNodeRole role = roleMap.get(roleName);
-            if (role == null) {
-                if (in.getVersion().onOrAfter(Version.V_2_1_0)) {
-                    roles.add(new DiscoveryNodeRole.DynamicRole(roleName, roleNameAbbreviation, canContainData));
-                } else {
-                    roles.add(new DiscoveryNodeRole.UnknownRole(roleName, roleNameAbbreviation, canContainData));
-                }
-            } else {
-                assert roleName.equals(role.roleName()) : "role name [" + roleName + "] does not match role [" + role.roleName() + "]";
-                assert roleNameAbbreviation.equals(role.roleNameAbbreviation()) : "role name abbreviation ["
-                    + roleName
-                    + "] does not match role ["
-                    + role.roleNameAbbreviation()
-                    + "]";
-                roles.add(role);
-            }
+            roles.add(buildRole(in.readString(), in.readString(), in.readBoolean(), in.getVersion()));
         }
         this.roles = Collections.unmodifiableSortedSet(new TreeSet<>(roles));
         this.version = in.readVersion();
+    }
+
+    static DiscoveryNodeRole buildRole(String name, String abbreviation, boolean canContainData, Version version) {
+        final DiscoveryNodeRole role = roleMap.get(name);
+        if (role == null) {
+            if (version.onOrAfter(Version.V_2_1_0)) {
+                return new DiscoveryNodeRole.DynamicRole(name, abbreviation, canContainData);
+            } else {
+                return new DiscoveryNodeRole.UnknownRole(name, abbreviation, canContainData);
+            }
+        } else {
+            assert name.equals(role.roleName()) : "role name [" + name + "] does not match role [" + role.roleName() + "]";
+            assert abbreviation.equals(role.roleNameAbbreviation()) : "role name abbreviation ["
+                + name
+                + "] does not match role ["
+                + role.roleNameAbbreviation()
+                + "]";
+            return role;
+        }
     }
 
     @Override
@@ -378,6 +384,8 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
         }
         out.writeVersion(version);
     }
+
+
 
     /**
      * The address that the node can be communicated with.

@@ -201,6 +201,7 @@ public class InboundDecoder implements Releasable {
                 streamInput.readInt();
                 header.finishParsingHeader(streamInput);
             }
+            System.out.println("*****************" + header.getActionName() + ": " + networkMessageSize);
             return header;
         }
     }

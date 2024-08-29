@@ -1,0 +1,34 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ *
+ * Modifications Copyright OpenSearch Contributors. See
+ * GitHub history for details.
+ */
+
+syntax = "proto3";
+package org.opensearch.cluster.node;
+
+import "core/common/transport/TransportAddress.proto";
+
+option java_outer_classname = "DiscoveryNodeProto";
+
+message DiscoveryNode {
+  message Role {
+    string name = 1;
+    string abbreviation = 2;
+    bool canContainData = 3;
+  }
+  string nodeName = 1;
+  string nodeId = 2;
+  string ephemeralId = 3;
+  string hostName = 4;
+  string hostAddress = 5;
+  org.opensearch.core.common.transport.TransportAddress address = 6;
+  map<string, string> attributes = 7;
+  repeated Role roles = 8;
+  int32 version = 9;
+}

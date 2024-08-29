@@ -35,9 +35,11 @@ package org.opensearch.cluster.coordination;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
+import org.opensearch.Version;
 import org.opensearch.cluster.ClusterManagerMetrics;
 import org.opensearch.cluster.coordination.Coordinator.Mode;
 import org.opensearch.cluster.node.DiscoveryNode;
+import org.opensearch.cluster.node.DiscoveryNodeProtoConverter;
 import org.opensearch.cluster.node.DiscoveryNodes;
 import org.opensearch.common.settings.ClusterSettings;
 import org.opensearch.common.settings.Setting;
@@ -46,6 +48,7 @@ import org.opensearch.common.unit.TimeValue;
 import org.opensearch.common.util.concurrent.AbstractRunnable;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.core.tasks.TaskIdProto;
 import org.opensearch.core.transport.TransportResponse.Empty;
 import org.opensearch.monitor.NodeHealthService;
 import org.opensearch.monitor.StatusInfo;
@@ -55,6 +58,7 @@ import org.opensearch.transport.Transport;
 import org.opensearch.transport.TransportChannel;
 import org.opensearch.transport.TransportConnectionListener;
 import org.opensearch.transport.TransportException;
+import org.opensearch.transport.TransportProtocol;
 import org.opensearch.transport.TransportRequest;
 import org.opensearch.transport.TransportRequestOptions;
 import org.opensearch.transport.TransportRequestOptions.Type;
@@ -155,7 +159,7 @@ public class FollowersChecker {
             Names.SAME,
             false,
             false,
-            FollowerCheckRequest::new,
+            FollowerCheckRequest::read,
             (request, transportChannel, task) -> handleFollowerCheck(request, transportChannel)
         );
         transportService.addConnectionListener(new TransportConnectionListener() {
@@ -493,17 +497,46 @@ public class FollowersChecker {
             this.sender = sender;
         }
 
-        public FollowerCheckRequest(final StreamInput in) throws IOException {
+        private FollowerCheckRequest(final StreamInput in) throws IOException {
             super(in);
             term = in.readLong();
             sender = new DiscoveryNode(in);
         }
 
+        public static FollowerCheckRequest read(StreamInput in) throws IOException {
+            if (in.getVersion().onOrAfter(Version.V_3_0_0)) {
+                return readProto(in);
+            } else {
+                return new FollowerCheckRequest(in);
+            }
+        }
+
         @Override
         public void writeTo(final StreamOutput out) throws IOException {
-            super.writeTo(out);
-            out.writeLong(term);
-            sender.writeTo(out);
+            if (out.getVersion().onOrAfter(Version.V_3_0_0)) {
+                writeProto(out);
+            } else {
+                super.writeTo(out);
+                out.writeLong(term);
+                sender.writeTo(out);
+            }
+        }
+
+        private void writeProto(StreamOutput out) throws IOException {
+            final FollowerCheckRequestProto.FollowerCheckRequest.Builder builder = FollowerCheckRequestProto.FollowerCheckRequest.newBuilder();
+            if (getParentTask().isSet()) {
+                builder.getParentTaskIdBuilder()
+                    .setId(getParentTask().getId())
+                    .setNodeId(getParentTask().getNodeId());
+            }
+            builder.setTerm(term);
+            builder.setSender(DiscoveryNodeProtoConverter.toProto(sender));
+            builder.build().writeTo(out);
+        }
+
+        private static FollowerCheckRequest readProto(StreamInput in) throws IOException {
+            final FollowerCheckRequestProto.FollowerCheckRequest parsed = FollowerCheckRequestProto.FollowerCheckRequest.parseFrom(in);
+            return new FollowerCheckRequest(parsed.getTerm(), DiscoveryNodeProtoConverter.fromProto(parsed.getSender()));
         }
 
         @Override
