@@ -41,6 +41,7 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.common.io.stream.Writeable;
 import org.opensearch.core.common.transport.TransportAddress;
+import org.opensearch.core.common.transport.TransportAddressProto;
 import org.opensearch.core.xcontent.ToXContentFragment;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.node.Node;
@@ -49,6 +50,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -139,15 +141,10 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
         return getRolesFromSettings(settings).stream().allMatch(DiscoveryNodeRole.SEARCH_ROLE::equals);
     }
 
-    private final String nodeName;
-    private final String nodeId;
-    private final String ephemeralId;
-    private final String hostName;
-    private final String hostAddress;
-    private final TransportAddress address;
-    private final Map<String, String> attributes;
-    private final Version version;
-    private final SortedSet<DiscoveryNodeRole> roles;
+    final DiscoveryNodeProto.DiscoveryNode proto;
+
+    // memoize the converted roles to avoid computing on-demand in all the various accessors that use this field
+    private final Set<DiscoveryNodeRole> roles;
 
     /**
      * Creates a new {@link DiscoveryNode}
@@ -257,22 +254,21 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
         Set<DiscoveryNodeRole> roles,
         Version version
     ) {
-        if (nodeName != null) {
-            this.nodeName = nodeName.intern();
-        } else {
-            this.nodeName = "";
-        }
-        this.nodeId = nodeId.intern();
-        this.ephemeralId = ephemeralId.intern();
-        this.hostName = hostName.intern();
-        this.hostAddress = hostAddress.intern();
-        this.address = address;
-        if (version == null) {
-            this.version = Version.CURRENT;
-        } else {
-            this.version = version;
-        }
-        this.attributes = Collections.unmodifiableMap(attributes);
+        this(DiscoveryNodeProto.DiscoveryNode.newBuilder()
+            .setNodeName(nodeName != null ? nodeName.intern() : "")
+            .setNodeId(nodeId.intern())
+            .setEphemeralId(ephemeralId.intern())
+            .setHostName(hostName.intern())
+            .setHostAddress(hostAddress.intern())
+            .setAddress(TransportAddressProto.TransportAddress.newBuilder()
+                .setHost(address.address().getHostString())
+                .setAddr(ByteString.copyFrom(address.address().getAddress().getAddress()))
+                .setPort(address.getPort())
+                .build())
+            .setVersion(version == null ? Version.CURRENT.id : version.id)
+            .putAllAttributes(attributes)
+            .addAllRoles(roles.stream().map(DiscoveryNodeRoleProtoConverter::toProto).collect(Collectors.toSet()))
+            .build());
         // verify that no node roles are being provided as attributes
         Predicate<Map<String, String>> predicate = (attrs) -> {
             boolean success = true;
@@ -283,7 +279,11 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
             return success;
         };
         assert predicate.test(attributes) : attributes;
-        this.roles = Collections.unmodifiableSortedSet(new TreeSet<>(roles));
+    }
+
+    DiscoveryNode(DiscoveryNodeProto.DiscoveryNode proto) {
+        this.proto = proto;
+        this.roles = proto.getRolesList().stream().map(DiscoveryNodeRoleProtoConverter::fromProto).collect(Collectors.toSet());
     }
 
     /** Creates a DiscoveryNode representing the local node. */
@@ -323,24 +323,34 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
      * @throws IOException if there is an error while reading from the stream
      */
     public DiscoveryNode(StreamInput in) throws IOException {
-        this.nodeName = in.readString().intern();
-        this.nodeId = in.readString().intern();
-        this.ephemeralId = in.readString().intern();
-        this.hostName = in.readString().intern();
-        this.hostAddress = in.readString().intern();
-        this.address = new TransportAddress(in);
+        this(
+            in.readString().intern(),
+            in.readString().intern(),
+            in.readString().intern(),
+            in.readString().intern(),
+            in.readString().intern(),
+            new TransportAddress(in),
+            readAttributes(in),
+            readRoles(in),
+            in.readVersion());
+    }
+
+    private static Map<String, String> readAttributes(StreamInput in) throws IOException {
         int size = in.readVInt();
-        this.attributes = new HashMap<>(size);
+        Map<String, String> attributes = new HashMap<>(size);
         for (int i = 0; i < size; i++) {
-            this.attributes.put(in.readString(), in.readString());
+            attributes.put(in.readString(), in.readString());
         }
+        return attributes;
+    }
+
+    private static Set<DiscoveryNodeRole> readRoles(StreamInput in) throws IOException {
         int rolesSize = in.readVInt();
         final Set<DiscoveryNodeRole> roles = new HashSet<>(rolesSize);
         for (int i = 0; i < rolesSize; i++) {
             roles.add(buildRole(in.readString(), in.readString(), in.readBoolean(), in.getVersion()));
         }
-        this.roles = Collections.unmodifiableSortedSet(new TreeSet<>(roles));
-        this.version = in.readVersion();
+        return new TreeSet<>(roles);
     }
 
     static DiscoveryNodeRole buildRole(String name, String abbreviation, boolean canContainData, Version version) {
@@ -364,25 +374,29 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
-        out.writeString(nodeName);
-        out.writeString(nodeId);
-        out.writeString(ephemeralId);
-        out.writeString(hostName);
-        out.writeString(hostAddress);
-        address.writeTo(out);
-        out.writeVInt(attributes.size());
-        for (Map.Entry<String, String> entry : attributes.entrySet()) {
+        out.writeString(proto.getNodeName());
+        out.writeString(proto.getNodeId());
+        out.writeString(proto.getEphemeralId());
+        out.writeString(proto.getHostName());
+        out.writeString(proto.getHostAddress());
+
+        ByteString bytes = proto.getAddress().getAddr();
+        out.writeByte((byte) bytes.size()); // 1 byte
+        out.write(bytes.toByteArray(), 0, bytes.size());
+        out.writeString(proto.getAddress().getHost());
+        out.writeInt(proto.getAddress().getPort());
+        out.writeVInt(proto.getAttributesMap().size());
+        for (Map.Entry<String, String> entry : proto.getAttributesMap().entrySet()) {
             out.writeString(entry.getKey());
             out.writeString(entry.getValue());
         }
-        out.writeVInt(roles.size());
-        for (final DiscoveryNodeRole role : roles) {
-            final DiscoveryNodeRole compatibleRole = role.getCompatibilityRole(out.getVersion());
-            out.writeString(compatibleRole.roleName());
-            out.writeString(compatibleRole.roleNameAbbreviation());
-            out.writeBoolean(compatibleRole.canContainData());
+        out.writeVInt(proto.getRolesList().size());
+        for (final DiscoveryNodeProto.DiscoveryNode.Role role : proto.getRolesList()) {
+            out.writeString(role.getName());
+            out.writeString(role.getAbbreviation());
+            out.writeBoolean(role.getCanContainData());
         }
-        out.writeVersion(version);
+        out.writeVersion(Version.fromId(proto.getVersion()));
     }
 
 
@@ -391,14 +405,20 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
      * The address that the node can be communicated with.
      */
     public TransportAddress getAddress() {
-        return address;
+        final InetAddress inetAddress;
+        try {
+            inetAddress = InetAddress.getByAddress(proto.getAddress().getHost(), proto.getAddress().getAddr().toByteArray());
+        } catch (UnknownHostException e) {
+            throw new IllegalArgumentException(e);
+        }
+        return new TransportAddress(new InetSocketAddress(inetAddress, proto.getAddress().getPort()));
     }
 
     /**
      * The unique id of the node.
      */
     public String getId() {
-        return nodeId;
+        return proto.getNodeId();
     }
 
     /**
@@ -409,28 +429,28 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
      * {@link DiscoveryNode#equals(Object)}.
      */
     public String getEphemeralId() {
-        return ephemeralId;
+        return proto.getEphemeralId();
     }
 
     /**
      * The name of the node.
      */
     public String getName() {
-        return this.nodeName;
+        return proto.getNodeName();
     }
 
     /**
      * The node attributes.
      */
     public Map<String, String> getAttributes() {
-        return this.attributes;
+        return proto.getAttributesMap();
     }
 
     /**
      * Should this node hold data (shards) or not.
      */
     public boolean isDataNode() {
-        return roles.stream().anyMatch(DiscoveryNodeRole::canContainData);
+        return proto.getRolesList().stream().anyMatch(DiscoveryNodeProto.DiscoveryNode.Role::getCanContainData);
     }
 
     /**
@@ -508,15 +528,15 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
     }
 
     public Version getVersion() {
-        return this.version;
+        return Version.fromId(proto.getVersion());
     }
 
     public String getHostName() {
-        return this.hostName;
+        return proto.getHostName();
     }
 
     public String getHostAddress() {
-        return this.hostAddress;
+        return proto.getHostAddress();
     }
 
     @Override
@@ -530,7 +550,7 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
 
         DiscoveryNode that = (DiscoveryNode) o;
 
-        return ephemeralId.equals(that.ephemeralId);
+        return this.proto.getEphemeralId().equals(that.proto.getEphemeralId());
     }
 
     @Override
@@ -538,27 +558,28 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
         // we only need to hash the id because it's highly unlikely that two nodes
         // in our system will have the same id but be different
         // This is done so that this class can be used efficiently as a key in a map
-        return ephemeralId.hashCode();
+        return proto.getEphemeralId().hashCode();
     }
 
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        if (nodeName.length() > 0) {
-            sb.append('{').append(nodeName).append('}');
+        if (getName().length() > 0) {
+            sb.append('{').append(getName()).append('}');
         }
-        sb.append('{').append(nodeId).append('}');
-        sb.append('{').append(ephemeralId).append('}');
-        sb.append('{').append(hostName).append('}');
-        sb.append('{').append(address).append('}');
+        sb.append('{').append(getId()).append('}');
+        sb.append('{').append(getEphemeralId()).append('}');
+        sb.append('{').append(getHostName()).append('}');
+        sb.append('{').append(getAddress()).append('}');
+        final Collection<DiscoveryNodeRole> roles = getRoles();
         if (roles.isEmpty() == false) {
             sb.append('{');
             roles.stream().map(DiscoveryNodeRole::roleNameAbbreviation).sorted().forEach(sb::append);
             sb.append('}');
         }
-        if (!attributes.isEmpty()) {
+        if (!getAttributes().isEmpty()) {
             sb.append(
-                attributes.entrySet()
+                getAttributes().entrySet()
                     .stream()
                     .filter(entry -> !entry.getKey().startsWith(REMOTE_STORE_NODE_ATTRIBUTE_KEY_PREFIX)) // filter remote_store attributes
                                                                                                          // from logging to reduce noise.
@@ -576,7 +597,7 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
         builder.field("transport_address", getAddress().toString());
 
         builder.startObject("attributes");
-        for (Map.Entry<String, String> entry : attributes.entrySet()) {
+        for (Map.Entry<String, String> entry : getAttributes().entrySet()) {
             builder.field(entry.getKey(), entry.getValue());
         }
         builder.endObject();

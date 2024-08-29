@@ -39,6 +39,7 @@ import org.opensearch.Version;
 import org.opensearch.cluster.ClusterManagerMetrics;
 import org.opensearch.cluster.coordination.Coordinator.Mode;
 import org.opensearch.cluster.node.DiscoveryNode;
+import org.opensearch.cluster.node.DiscoveryNodeProto;
 import org.opensearch.cluster.node.DiscoveryNodeProtoConverter;
 import org.opensearch.cluster.node.DiscoveryNodes;
 import org.opensearch.common.settings.ClusterSettings;
@@ -226,13 +227,13 @@ public class FollowersChecker {
         }
 
         final FastResponseState responder = this.fastResponseState;
-        if (responder.mode == Mode.FOLLOWER && responder.term == request.term) {
+        if (responder.mode == Mode.FOLLOWER && responder.term == request.getTerm()) {
             logger.trace("responding to {} on fast path", request);
             transportChannel.sendResponse(Empty.INSTANCE);
             return;
         }
 
-        if (request.term < responder.term) {
+        if (request.getTerm() < responder.term) {
             throw new CoordinationStateRejectedException("rejecting " + request + " since local state is " + this);
         }
 
@@ -480,27 +481,29 @@ public class FollowersChecker {
      */
     public static class FollowerCheckRequest extends TransportRequest {
 
-        private final long term;
-
-        private final DiscoveryNode sender;
+        private final FollowerCheckRequestProto.FollowerCheckRequest proto;
 
         public long getTerm() {
-            return term;
+            return proto.getTerm();
         }
 
         public DiscoveryNode getSender() {
-            return sender;
+            return DiscoveryNodeProtoConverter.fromProto(proto.getSender());
         }
 
         public FollowerCheckRequest(final long term, final DiscoveryNode sender) {
-            this.term = term;
-            this.sender = sender;
+            this.proto = FollowerCheckRequestProto.FollowerCheckRequest.newBuilder()
+                .setTerm(term)
+                .setSender(DiscoveryNodeProtoConverter.toProto(sender))
+                .build();
         }
 
         private FollowerCheckRequest(final StreamInput in) throws IOException {
             super(in);
-            term = in.readLong();
-            sender = new DiscoveryNode(in);
+            this.proto = FollowerCheckRequestProto.FollowerCheckRequest.newBuilder()
+                .setTerm(in.readLong())
+                .setSender(DiscoveryNodeProtoConverter.toProto(new DiscoveryNode(in)))
+                .build();
         }
 
         public static FollowerCheckRequest read(StreamInput in) throws IOException {
@@ -517,21 +520,13 @@ public class FollowersChecker {
                 writeProto(out);
             } else {
                 super.writeTo(out);
-                out.writeLong(term);
-                sender.writeTo(out);
+                out.writeLong(proto.getTerm());
+                DiscoveryNodeProtoConverter.fromProto(proto.getSender()).writeTo(out);
             }
         }
 
         private void writeProto(StreamOutput out) throws IOException {
-            final FollowerCheckRequestProto.FollowerCheckRequest.Builder builder = FollowerCheckRequestProto.FollowerCheckRequest.newBuilder();
-            if (getParentTask().isSet()) {
-                builder.getParentTaskIdBuilder()
-                    .setId(getParentTask().getId())
-                    .setNodeId(getParentTask().getNodeId());
-            }
-            builder.setTerm(term);
-            builder.setSender(DiscoveryNodeProtoConverter.toProto(sender));
-            builder.build().writeTo(out);
+            proto.writeTo(out);
         }
 
         private static FollowerCheckRequest readProto(StreamInput in) throws IOException {
@@ -544,17 +539,17 @@ public class FollowersChecker {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
             FollowerCheckRequest that = (FollowerCheckRequest) o;
-            return term == that.term && Objects.equals(sender, that.sender);
+            return this.proto.equals(that.proto);
         }
 
         @Override
         public String toString() {
-            return "FollowerCheckRequest{" + "term=" + term + ", sender=" + sender + '}';
+            return "FollowerCheckRequest{" + "term=" + proto.getTerm() + ", sender=" + DiscoveryNodeProtoConverter.fromProto(proto.getSender()) + '}';
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(term, sender);
+            return proto.hashCode();
         }
     }
 }
