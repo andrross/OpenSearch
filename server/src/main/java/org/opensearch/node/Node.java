@@ -265,8 +265,10 @@ import org.opensearch.threadpool.RunnableTaskExecutionListener;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.transport.RemoteClusterService;
 import org.opensearch.transport.Transport;
+import org.opensearch.transport.TransportDecompressor;
 import org.opensearch.transport.TransportInterceptor;
 import org.opensearch.transport.TransportService;
+import org.opensearch.transport.TransportSettings;
 import org.opensearch.usage.UsageService;
 import org.opensearch.watcher.ResourceWatcherService;
 import org.opensearch.wlm.QueryGroupService;
@@ -1538,6 +1540,7 @@ public class Node implements Closeable {
         Set<String> taskHeaders,
         Tracer tracer
     ) {
+        TransportDecompressor.setCompressor(TransportSettings.TRANSPORT_COMPRESS_ALGORITHM.get(settings));
         return new TransportService(settings, transport, threadPool, interceptor, localNodeFactory, clusterSettings, taskHeaders, tracer);
     }
 

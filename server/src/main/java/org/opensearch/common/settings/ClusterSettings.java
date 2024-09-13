@@ -451,6 +451,7 @@ public final class ClusterSettings extends AbstractScopedSettings {
                 TransportSettings.PUBLISH_PORT_PROFILE,
                 TransportSettings.OLD_TRANSPORT_COMPRESS,
                 TransportSettings.TRANSPORT_COMPRESS,
+                TransportSettings.TRANSPORT_COMPRESS_ALGORITHM,
                 TransportSettings.PING_SCHEDULE,
                 TransportSettings.TCP_CONNECT_TIMEOUT,
                 TransportSettings.CONNECT_TIMEOUT,

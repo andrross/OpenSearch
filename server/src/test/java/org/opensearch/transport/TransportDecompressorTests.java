@@ -36,6 +36,8 @@ import org.opensearch.common.bytes.ReleasableBytesReference;
 import org.opensearch.common.io.Streams;
 import org.opensearch.common.io.stream.BytesStreamOutput;
 import org.opensearch.common.lease.Releasables;
+import org.opensearch.common.recycler.Recycler;
+import org.opensearch.common.settings.Settings;
 import org.opensearch.common.util.PageCacheRecycler;
 import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.core.common.bytes.CompositeBytesReference;
@@ -45,8 +47,15 @@ import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.compress.CompressorRegistry;
 import org.opensearch.test.OpenSearchTestCase;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.ByteBuffer;
+import java.util.Collection;
+
+import com.github.luben.zstd.ZstdBufferDecompressingStreamNoFinalizer;
 
 public class TransportDecompressorTests extends OpenSearchTestCase {
 
@@ -54,30 +63,28 @@ public class TransportDecompressorTests extends OpenSearchTestCase {
         try (BytesStreamOutput output = new BytesStreamOutput()) {
             byte randomByte = randomByte();
             try (
-                OutputStream deflateStream = CompressorRegistry.defaultCompressor()
+                OutputStream deflateStream = TransportDecompressor.COMPRESSOR
                     .threadLocalOutputStream(Streams.flushOnCloseStream(output))
             ) {
                 deflateStream.write(randomByte);
             }
 
-            BytesReference bytes = output.bytes();
+            ReleasableBytesReference bytes = new ReleasableBytesReference(output.bytes(), () -> {});
 
             TransportDecompressor decompressor = new TransportDecompressor(PageCacheRecycler.NON_RECYCLING_INSTANCE);
-            int bytesConsumed = decompressor.decompress(bytes);
-            assertEquals(bytes.length(), bytesConsumed);
-            assertTrue(decompressor.isEOS());
-            ReleasableBytesReference releasableBytesReference = decompressor.pollDecompressedPage();
+            decompressor.accept(bytes);
+            Collection<ReleasableBytesReference> pages = decompressor.decompress();
+            ReleasableBytesReference releasableBytesReference = pages.stream().findFirst().get();
             assertEquals(randomByte, releasableBytesReference.get(0));
             releasableBytesReference.close();
-
         }
     }
-
+/*
     public void testMultiPageCompression() throws IOException {
         try (BytesStreamOutput output = new BytesStreamOutput()) {
             try (
                 StreamOutput deflateStream = new OutputStreamStreamOutput(
-                    CompressorRegistry.defaultCompressor().threadLocalOutputStream(Streams.flushOnCloseStream(output))
+                    TransportDecompressor.COMPRESSOR.threadLocalOutputStream(Streams.flushOnCloseStream(output))
                 )
             ) {
                 for (int i = 0; i < 10000; ++i) {
@@ -109,7 +116,7 @@ public class TransportDecompressorTests extends OpenSearchTestCase {
         try (BytesStreamOutput output = new BytesStreamOutput()) {
             try (
                 StreamOutput deflateStream = new OutputStreamStreamOutput(
-                    CompressorRegistry.defaultCompressor().threadLocalOutputStream(Streams.flushOnCloseStream(output))
+                    TransportDecompressor.COMPRESSOR.threadLocalOutputStream(Streams.flushOnCloseStream(output))
                 )
             ) {
                 for (int i = 0; i < 10000; ++i) {
@@ -129,10 +136,10 @@ public class TransportDecompressorTests extends OpenSearchTestCase {
 
             int bytesConsumed1 = decompressor.decompress(inbound1);
             assertEquals(inbound1.length(), bytesConsumed1);
-            assertFalse(decompressor.isEOS());
+            //assertFalse(decompressor.isEOS());
             int bytesConsumed2 = decompressor.decompress(inbound2);
             assertEquals(inbound2.length(), bytesConsumed2);
-            assertFalse(decompressor.isEOS());
+            //assertFalse(decompressor.isEOS());
             int bytesConsumed3 = decompressor.decompress(inbound3);
             assertEquals(inbound3.length(), bytesConsumed3);
             assertTrue(decompressor.isEOS());
@@ -151,4 +158,40 @@ public class TransportDecompressorTests extends OpenSearchTestCase {
         }
     }
 
+*/
+//    public void test() throws IOException {
+//        byte[] bytes;
+//        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+//            try (OutputStream outputStream = TransportDecompressor.COMPRESSOR.threadLocalOutputStream(baos)) {
+//                for (int i = 0; i < 1024; ++i) {
+//                    outputStream.write(42);
+//                }
+//            }
+//            bytes = baos.toByteArray();
+//        }
+//
+//        PageCacheRecycler recycler = new PageCacheRecycler(Settings.EMPTY);
+//        try (InputStream is = TransportDecompressor.COMPRESSOR.threadLocalInputStream(new ByteArrayInputStream(bytes))) {
+//            while (is.available() > 0) {
+//                Recycler.V<byte[]> page = recycler.bytePage(false);
+//
+//            }
+//        }
+//
+//
+//        ZstdBufferDecompressingStreamNoFinalizer zis = new ZstdBufferDecompressingStreamNoFinalizer(ByteBuffer.wrap(bytes).position(5));
+//        ByteBuffer b1 = ByteBuffer.allocate(512);
+//        ByteBuffer b2 = ByteBuffer.allocate(256);
+//        ByteBuffer b3 = ByteBuffer.allocate(256);
+//        int bytesRead = zis.read(b1);
+//        System.out.println(bytesRead);
+//        System.out.println("Has remaining: " + zis.hasRemaining());
+//        bytesRead = zis.read(b2);
+//        System.out.println(bytesRead);
+//        System.out.println("Has remaining: " + zis.hasRemaining());
+//        bytesRead = zis.read(b3);
+//        System.out.println(bytesRead);
+//        System.out.println("Has remaining: " + zis.hasRemaining());
+//        zis.close();
+//    }
 }

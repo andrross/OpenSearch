@@ -32,21 +32,21 @@
 
 package org.opensearch.transport;
 
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.BytesRefIterator;
 import org.opensearch.common.bytes.ReleasableBytesReference;
 import org.opensearch.common.recycler.Recycler;
 import org.opensearch.common.util.PageCacheRecycler;
 import org.opensearch.core.common.bytes.BytesArray;
 import org.opensearch.core.common.bytes.BytesReference;
+import org.opensearch.core.common.bytes.CompositeBytesReference;
 import org.opensearch.core.compress.Compressor;
 import org.opensearch.core.compress.CompressorRegistry;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.util.ArrayDeque;
-import java.util.zip.DataFormatException;
-import java.util.zip.Inflater;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 
 /**
  * Decompresses data over the transport wire
@@ -55,118 +55,56 @@ import java.util.zip.Inflater;
  */
 public class TransportDecompressor implements Closeable {
 
-    private final Inflater inflater;
+    public static Compressor COMPRESSOR;
+
+    public synchronized static void setCompressor(String compressor) {
+        COMPRESSOR = CompressorRegistry.getCompressor(compressor);
+    }
+
     private final PageCacheRecycler recycler;
-    private final ArrayDeque<Recycler.V<byte[]>> pages;
-    private int pageOffset = PageCacheRecycler.BYTE_PAGE_SIZE;
-    private boolean hasReadHeader = false;
+    private final Collection<ReleasableBytesReference> compressedBytes = new ArrayList<>();
 
     public TransportDecompressor(PageCacheRecycler recycler) {
         this.recycler = recycler;
-        inflater = new Inflater(true);
-        pages = new ArrayDeque<>(4);
     }
 
-    public int decompress(BytesReference bytesReference) throws IOException {
-        int bytesConsumed = 0;
-        if (hasReadHeader == false) {
-            final Compressor compressor = CompressorRegistry.defaultCompressor();
-            if (compressor.isCompressed(bytesReference) == false) {
-                int maxToRead = Math.min(bytesReference.length(), 10);
-                StringBuilder sb = new StringBuilder("stream marked as compressed, but no compressor found, first [").append(maxToRead)
-                    .append("] content bytes out of [")
-                    .append(bytesReference.length())
-                    .append("] readable bytes with message size [")
-                    .append(bytesReference.length())
-                    .append("] ")
-                    .append("] are [");
-                for (int i = 0; i < maxToRead; i++) {
-                    sb.append(bytesReference.get(i)).append(",");
-                }
-                sb.append("]");
-                throw new IllegalStateException(sb.toString());
-            }
-            hasReadHeader = true;
-            int headerLength = compressor.headerLength();
-            bytesReference = bytesReference.slice(headerLength, bytesReference.length() - headerLength);
-            bytesConsumed += headerLength;
-        }
-
-        BytesRefIterator refIterator = bytesReference.iterator();
-        BytesRef ref;
-        while ((ref = refIterator.next()) != null) {
-            inflater.setInput(ref.bytes, ref.offset, ref.length);
-            bytesConsumed += ref.length;
-            boolean continueInflating = true;
-            while (continueInflating) {
-                final Recycler.V<byte[]> page;
-                final boolean isNewPage = pageOffset == PageCacheRecycler.BYTE_PAGE_SIZE;
-                if (isNewPage) {
-                    pageOffset = 0;
-                    page = recycler.bytePage(false);
-                } else {
-                    page = pages.getLast();
-                }
-                byte[] output = page.v();
-                try {
-                    int bytesInflated = inflater.inflate(output, pageOffset, PageCacheRecycler.BYTE_PAGE_SIZE - pageOffset);
-                    pageOffset += bytesInflated;
-                    if (isNewPage) {
-                        if (bytesInflated == 0) {
-                            page.close();
-                            pageOffset = PageCacheRecycler.BYTE_PAGE_SIZE;
-                        } else {
-                            pages.add(page);
-                        }
-                    }
-                } catch (DataFormatException e) {
-                    throw new IOException("Exception while inflating bytes", e);
-                }
-                if (inflater.needsInput()) {
-                    continueInflating = false;
-                }
-                if (inflater.finished()) {
-                    bytesConsumed -= inflater.getRemaining();
-                    continueInflating = false;
-                }
-                assert inflater.needsDictionary() == false;
+    public Collection<ReleasableBytesReference> decompress() throws IOException {
+        final List<ReleasableBytesReference> results = new ArrayList<>();
+        final BytesReference ref = CompositeBytesReference.of(compressedBytes.toArray(new ReleasableBytesReference[0]));
+        try (InputStream is = COMPRESSOR.threadLocalInputStream(ref.streamInput())) {
+            while (is.available() > 0) {
+                final Recycler.V<byte[]> page = recycler.bytePage(false);
+                final int bytesRead = is.read(page.v(), 0, PageCacheRecycler.BYTE_PAGE_SIZE);
+                results.add(new ReleasableBytesReference(new BytesArray(page.v(), 0, bytesRead), page));
             }
         }
-
-        return bytesConsumed;
+        close();
+        return results;
     }
 
-    public boolean canDecompress(int bytesAvailable) {
-        return hasReadHeader || bytesAvailable >= CompressorRegistry.defaultCompressor().headerLength();
-    }
-
-    public boolean isEOS() {
-        return inflater.finished();
-    }
-
-    public ReleasableBytesReference pollDecompressedPage() {
-        if (pages.isEmpty()) {
-            return null;
-        } else if (pages.size() == 1) {
-            if (isEOS()) {
-                Recycler.V<byte[]> page = pages.pollFirst();
-                ReleasableBytesReference reference = new ReleasableBytesReference(new BytesArray(page.v(), 0, pageOffset), page);
-                pageOffset = 0;
-                return reference;
-            } else {
-                return null;
-            }
-        } else {
-            Recycler.V<byte[]> page = pages.pollFirst();
-            return new ReleasableBytesReference(new BytesArray(page.v()), page);
-        }
-    }
+//    public ReleasableBytesReference pollDecompressedPage() {
+//        if (pages.isEmpty()) {
+//            return null;
+//        } else if (pages.size() == 1) {
+//            Recycler.V<byte[]> page = pages.pollFirst();
+//            ReleasableBytesReference reference = new ReleasableBytesReference(new BytesArray(page.v(), 0, pageOffset), page);
+//            pageOffset = 0;
+//            return reference;
+//        } else {
+//            Recycler.V<byte[]> page = pages.pollFirst();
+//            return new ReleasableBytesReference(new BytesArray(page.v()), page);
+//        }
+//    }
 
     @Override
     public void close() {
-        inflater.end();
-        for (Recycler.V<byte[]> page : pages) {
-            page.close();
+        for (ReleasableBytesReference ref : compressedBytes) {
+            ref.close();
         }
+        compressedBytes.clear();
+    }
+
+    public void accept(ReleasableBytesReference retainedContent) {
+        compressedBytes.add(retainedContent.retain());
     }
 }

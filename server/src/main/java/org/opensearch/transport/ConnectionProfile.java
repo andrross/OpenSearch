@@ -102,6 +102,7 @@ public final class ConnectionProfile {
         builder.setHandshakeTimeout(TransportSettings.CONNECT_TIMEOUT.get(settings));
         builder.setPingInterval(TransportSettings.PING_SCHEDULE.get(settings));
         builder.setCompressionEnabled(TransportSettings.TRANSPORT_COMPRESS.get(settings));
+        builder.setCompressionAlgorithm(TransportSettings.TRANSPORT_COMPRESS_ALGORITHM.get(settings));
         builder.addConnections(connectionsPerNodeBulk, TransportRequestOptions.Type.BULK);
         builder.addConnections(connectionsPerNodePing, TransportRequestOptions.Type.PING);
         // if we are not cluster-manager eligible we don't need a dedicated channel to publish the state
@@ -160,6 +161,7 @@ public final class ConnectionProfile {
     private final TimeValue handshakeTimeout;
     private final TimeValue pingInterval;
     private final Boolean compressionEnabled;
+    private final String compressionAlgorithm;
 
     private ConnectionProfile(
         List<ConnectionTypeHandle> handles,
@@ -167,7 +169,8 @@ public final class ConnectionProfile {
         TimeValue connectTimeout,
         TimeValue handshakeTimeout,
         TimeValue pingInterval,
-        Boolean compressionEnabled
+        Boolean compressionEnabled,
+        String compressionAlgorithm
     ) {
         this.handles = handles;
         this.numConnections = numConnections;
@@ -175,6 +178,7 @@ public final class ConnectionProfile {
         this.handshakeTimeout = handshakeTimeout;
         this.pingInterval = pingInterval;
         this.compressionEnabled = compressionEnabled;
+        this.compressionAlgorithm = compressionAlgorithm;
     }
 
     /**
@@ -189,6 +193,7 @@ public final class ConnectionProfile {
         private TimeValue connectTimeout;
         private TimeValue handshakeTimeout;
         private Boolean compressionEnabled;
+        private String compressionAlgorithm = TransportSettings.TRANSPORT_COMPRESS_ALGORITHM.getDefault(Settings.EMPTY);
         private TimeValue pingInterval;
 
         /** create an empty builder */
@@ -202,6 +207,7 @@ public final class ConnectionProfile {
             connectTimeout = source.getConnectTimeout();
             handshakeTimeout = source.getHandshakeTimeout();
             compressionEnabled = source.getCompressionEnabled();
+            compressionAlgorithm = source.getCompressionAlgorithm();
             pingInterval = source.getPingInterval();
         }
 
@@ -243,6 +249,11 @@ public final class ConnectionProfile {
             return this;
         }
 
+        public Builder setCompressionAlgorithm(String compressionAlgorithm) {
+            this.compressionAlgorithm = compressionAlgorithm;
+            return this;
+        }
+
         /**
          * Adds a number of connections for one or more types. Each type can only be added once.
          * @param numConnections the number of connections to use in the pool for the given connection types
@@ -279,7 +290,8 @@ public final class ConnectionProfile {
                 connectTimeout,
                 handshakeTimeout,
                 pingInterval,
-                compressionEnabled
+                compressionEnabled,
+                compressionAlgorithm
             );
         }
 
@@ -312,6 +324,10 @@ public final class ConnectionProfile {
      */
     public Boolean getCompressionEnabled() {
         return compressionEnabled;
+    }
+
+    private String getCompressionAlgorithm() {
+        return compressionAlgorithm;
     }
 
     /**

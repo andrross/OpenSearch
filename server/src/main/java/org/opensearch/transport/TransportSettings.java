@@ -47,6 +47,7 @@ import static org.opensearch.common.settings.Setting.affixKeySetting;
 import static org.opensearch.common.settings.Setting.boolSetting;
 import static org.opensearch.common.settings.Setting.intSetting;
 import static org.opensearch.common.settings.Setting.listSetting;
+import static org.opensearch.common.settings.Setting.simpleString;
 import static org.opensearch.common.settings.Setting.timeSetting;
 
 /**
@@ -114,7 +115,12 @@ public final class TransportSettings {
     );
     public static final Setting<Boolean> TRANSPORT_COMPRESS = boolSetting(
         "transport.compress",
-        OLD_TRANSPORT_COMPRESS,
+        true,
+        Setting.Property.NodeScope
+    );
+    public static final Setting<String> TRANSPORT_COMPRESS_ALGORITHM = simpleString(
+        "transport.compress.algorithm",
+        "DEFLATE",
         Setting.Property.NodeScope
     );
     // the scheduled internal ping interval setting, defaults to disabled (-1)

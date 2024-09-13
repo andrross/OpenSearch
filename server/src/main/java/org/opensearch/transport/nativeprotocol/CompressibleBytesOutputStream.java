@@ -38,6 +38,7 @@ import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.core.common.io.stream.BytesStream;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.compress.CompressorRegistry;
+import org.opensearch.transport.TransportDecompressor;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -68,7 +69,7 @@ final class CompressibleBytesOutputStream extends StreamOutput {
         this.bytesStreamOutput = bytesStreamOutput;
         this.shouldCompress = shouldCompress;
         if (shouldCompress) {
-            this.stream = CompressorRegistry.defaultCompressor().threadLocalOutputStream(Streams.flushOnCloseStream(bytesStreamOutput));
+            this.stream = TransportDecompressor.COMPRESSOR.threadLocalOutputStream(Streams.flushOnCloseStream(bytesStreamOutput));
         } else {
             this.stream = bytesStreamOutput;
         }
