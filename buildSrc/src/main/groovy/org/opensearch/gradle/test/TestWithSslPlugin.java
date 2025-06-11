@@ -50,7 +50,7 @@ public class TestWithSslPlugin implements Plugin<Project> {
 
     @Override
     public void apply(Project project) {
-        File keyStoreDir = new File(project.getBuildDir(), "keystore");
+        File keyStoreDir = project.getLayout().getBuildDirectory().file("keystore").get().getAsFile();
         TaskProvider<ExportOpenSearchBuildResourcesTask> exportKeyStore = project.getTasks()
             .register("copyTestCertificates", ExportOpenSearchBuildResourcesTask.class, (t) -> {
                 t.copy("test/ssl/test-client.crt");
@@ -74,12 +74,10 @@ public class TestWithSslPlugin implements Plugin<Project> {
         });
 
         project.getPlugins().withType(TestClustersPlugin.class).configureEach(clustersPlugin -> {
-            File keystoreDir = new File(project.getBuildDir(), "keystore/test/ssl");
+            File keystoreDir = project.getLayout().getBuildDirectory().file("keystore/test/ssl").get().getAsFile();
             File nodeKeystore = new File(keystoreDir, "test-node.jks");
             File clientKeyStore = new File(keystoreDir, "test-client.jks");
-            NamedDomainObjectContainer<OpenSearchCluster> clusters = (NamedDomainObjectContainer<OpenSearchCluster>) project.getExtensions()
-                .getByName(TestClustersPlugin.EXTENSION_NAME);
-            clusters.all(c -> {
+            getOpenSearchClusters(project).all(c -> {
                 // copy keystores & certs into config/
                 c.extraConfigFile(nodeKeystore.getName(), nodeKeystore);
                 c.extraConfigFile(clientKeyStore.getName(), clientKeyStore);
@@ -89,5 +87,10 @@ public class TestWithSslPlugin implements Plugin<Project> {
         project.getTasks()
             .withType(ForbiddenPatternsTask.class)
             .configureEach(forbiddenPatternTask -> forbiddenPatternTask.exclude("**/*.crt"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static NamedDomainObjectContainer<OpenSearchCluster> getOpenSearchClusters(Project project) {
+        return (NamedDomainObjectContainer<OpenSearchCluster>) project.getExtensions().getByName(TestClustersPlugin.EXTENSION_NAME);
     }
 }
