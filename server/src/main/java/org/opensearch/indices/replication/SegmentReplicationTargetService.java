@@ -50,7 +50,6 @@ import org.opensearch.transport.TransportService;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -350,10 +349,7 @@ public class SegmentReplicationTargetService extends AbstractLifecycleComponent 
 
                         // if we received a checkpoint during the copy event that is ahead of this
                         // try and process it.
-                        ReplicationCheckpoint latestReceivedCheckpoint = replicator.getPrimaryCheckpoint(replicaShard.shardId());
-                        if (Objects.nonNull(latestReceivedCheckpoint) && latestReceivedCheckpoint.isAheadOf(receivedCheckpoint)) {
-                            processLatestReceivedCheckpoint(replicaShard, thread);
-                        }
+                        processLatestReceivedCheckpoint(replicaShard, thread);
                     }
 
                     @Override

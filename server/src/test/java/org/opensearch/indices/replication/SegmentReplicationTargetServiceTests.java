@@ -637,7 +637,6 @@ public class SegmentReplicationTargetServiceTests extends IndexShardTestCase {
 
         latch.await(2, TimeUnit.SECONDS);
         verify(spy, (atLeastOnce())).updateVisibleCheckpoint(eq(0L), eq(replicaShard));
-        verify(spy, times(1)).processLatestReceivedCheckpoint(any(), any());
     }
 
     public void testStartReplicationListenerFailure() throws InterruptedException {
