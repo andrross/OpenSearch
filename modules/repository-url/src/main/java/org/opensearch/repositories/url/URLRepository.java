@@ -50,6 +50,7 @@ import org.opensearch.repositories.RepositoryException;
 import org.opensearch.repositories.blobstore.BlobStoreRepository;
 
 import java.net.MalformedURLException;
+import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.Arrays;
@@ -194,7 +195,7 @@ public class URLRepository extends BlobStoreRepository {
 
     private static URL parseURL(String s) {
         try {
-            return new URL(s);
+            return URI.create(s).toURL();
         } catch (MalformedURLException e) {
             throw new IllegalArgumentException("Unable to parse URL repository setting", e);
         }

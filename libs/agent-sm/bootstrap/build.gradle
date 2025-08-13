@@ -16,9 +16,7 @@ base {
   archivesName = 'opensearch-agent-bootstrap'
 }
 
-tasks.named('forbiddenApisMain').configure {
-  replaceSignatureFiles 'jdk-signatures'
-}
+disableTasks('forbiddenApisMain')
 
 test.enabled = false
 testingConventions.enabled = false

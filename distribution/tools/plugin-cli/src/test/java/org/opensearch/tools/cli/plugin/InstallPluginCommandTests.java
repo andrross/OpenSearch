@@ -526,7 +526,7 @@ public class InstallPluginCommandTests extends OpenSearchTestCase {
         Path pluginDir = createPluginDir(temp);
         String pluginZip = createPluginUrl("fake", pluginDir);
         Path pluginZipWithSpaces = createTempFile("foo bar", ".zip");
-        try (InputStream in = FileSystemUtils.openFileURLStream(new URL(pluginZip))) {
+        try (InputStream in = FileSystemUtils.openFileURLStream(URI.create(pluginZip).toURL())) {
             Files.copy(in, pluginZipWithSpaces, StandardCopyOption.REPLACE_EXISTING);
         }
         installPlugin(pluginZipWithSpaces.toUri().toURL().toString(), env.v1());

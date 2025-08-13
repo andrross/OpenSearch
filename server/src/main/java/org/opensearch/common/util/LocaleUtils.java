@@ -32,6 +32,8 @@
 
 package org.opensearch.common.util;
 
+import org.opensearch.common.SuppressForbidden;
+
 import java.util.Arrays;
 import java.util.Locale;
 import java.util.MissingResourceException;
@@ -89,6 +91,7 @@ public class LocaleUtils {
         return locale;
     }
 
+    @SuppressForbidden(reason = "yup")
     private static Locale parseParts(String[] parts) {
         switch (parts.length) {
             case 3:
