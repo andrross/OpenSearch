@@ -61,6 +61,8 @@ import org.apache.lucene.tests.util.LuceneTestCase.SuppressCodecs;
 import org.apache.lucene.tests.util.TestRuleMarkFailure;
 import org.apache.lucene.tests.util.TestUtil;
 import org.apache.lucene.tests.util.TimeUnits;
+import org.awaitility.Awaitility;
+import org.awaitility.pollinterval.IterativePollInterval;
 import org.opensearch.Version;
 import org.opensearch.bootstrap.BootstrapForTesting;
 import org.opensearch.cluster.ClusterModule;
@@ -164,6 +166,7 @@ import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -195,6 +198,7 @@ import java.util.stream.Stream;
 import reactor.core.scheduler.Schedulers;
 
 import static java.util.Collections.emptyMap;
+import static org.awaitility.Awaitility.await;
 import static org.opensearch.core.common.util.CollectionUtils.arrayAsArrayList;
 import static org.opensearch.index.store.remote.filecache.FileCacheSettings.DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING;
 import static org.hamcrest.Matchers.empty;
@@ -1158,33 +1162,8 @@ public abstract class OpenSearchTestCase extends LuceneTestCase {
      * Runs the code block for the provided interval, waiting for no assertions to trip.
      */
     public static void assertBusy(CheckedRunnable<Exception> codeBlock, long maxWaitTime, TimeUnit unit) throws Exception {
-        long maxTimeInMillis = TimeUnit.MILLISECONDS.convert(maxWaitTime, unit);
-        // In case you've forgotten your high-school studies, log10(x) / log10(y) == log y(x)
-        long iterations = Math.max(Math.round(Math.log10(maxTimeInMillis) / Math.log10(2)), 1);
-        long timeInMillis = 1;
-        long sum = 0;
-        List<AssertionError> failures = new ArrayList<>();
-        for (int i = 0; i < iterations; i++) {
-            try {
-                codeBlock.run();
-                return;
-            } catch (AssertionError e) {
-                failures.add(e);
-            }
-            sum += timeInMillis;
-            Thread.sleep(timeInMillis);
-            timeInMillis *= 2;
-        }
-        timeInMillis = maxTimeInMillis - sum;
-        Thread.sleep(Math.max(timeInMillis, 0));
-        try {
-            codeBlock.run();
-        } catch (AssertionError e) {
-            for (AssertionError failure : failures) {
-                e.addSuppressed(failure);
-            }
-            throw e;
-        }
+        await().pollInterval(new IterativePollInterval(d -> d.multipliedBy(2), Duration.ofMillis(1)))
+            .atMost(maxWaitTime, unit).untilAsserted(codeBlock::run);
     }
 
     /**
@@ -1192,31 +1171,9 @@ public abstract class OpenSearchTestCase extends LuceneTestCase {
      */
     public static void assertBusyWithFixedSleepTime(CheckedRunnable<Exception> codeBlock, TimeValue maxWaitTime, TimeValue sleepTime)
         throws Exception {
-        long maxTimeInMillis = maxWaitTime.millis();
-        long sleepTimeInMillis = sleepTime.millis();
-        if (sleepTimeInMillis > maxTimeInMillis) {
-            throw new IllegalArgumentException("sleepTime is more than the maxWaitTime");
-        }
-        long sum = 0;
-        List<AssertionError> failures = new ArrayList<>();
-        while (sum <= maxTimeInMillis) {
-            try {
-                codeBlock.run();
-                return;
-            } catch (AssertionError e) {
-                failures.add(e);
-            }
-            sum += sleepTimeInMillis;
-            Thread.sleep(sleepTimeInMillis);
-        }
-        try {
-            codeBlock.run();
-        } catch (AssertionError e) {
-            for (AssertionError failure : failures) {
-                e.addSuppressed(failure);
-            }
-            throw e;
-        }
+        await().atMost(maxWaitTime.millis(), TimeUnit.MILLISECONDS)
+            .pollInterval(sleepTime.millis(), TimeUnit.MILLISECONDS)
+            .untilAsserted(codeBlock::run);
     }
 
     /**
