@@ -47,6 +47,7 @@ import java.util.stream.Stream;
 
 import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_REPLICAS;
 import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 
 @OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
 public class RemoteStoreStatsIT extends RemoteStoreBaseIntegTestCase {
@@ -756,7 +757,7 @@ public class RemoteStoreStatsIT extends RemoteStoreBaseIntegTestCase {
         assertEquals(0, stats.totalUploadsFailed);
         assertTrue(stats.uploadBytesSucceeded > 0);
         assertTrue(stats.totalUploadsSucceeded > 0);
-        assertTrue(stats.totalUploadTimeInMillis > 0);
+        assertThat(stats.totalUploadTimeInMillis, greaterThanOrEqualTo(0L));
         assertTrue(stats.lastSuccessfulUploadTimestamp > 0);
     }
 
@@ -774,8 +775,7 @@ public class RemoteStoreStatsIT extends RemoteStoreBaseIntegTestCase {
     private void assertNonZeroTranslogDownloadStats(RemoteTranslogTransferTracker.Stats stats) {
         assertTrue(stats.downloadBytesSucceeded > 0);
         assertTrue(stats.totalDownloadsSucceeded > 0);
-        // TODO: Need to simulate a delay for this assertion to avoid flakiness
-        // assertTrue(stats.totalDownloadTimeInMillis > 0);
+        assertThat(stats.totalDownloadTimeInMillis, greaterThanOrEqualTo(0L));
         assertTrue(stats.lastSuccessfulDownloadTimestamp > 0);
     }
 

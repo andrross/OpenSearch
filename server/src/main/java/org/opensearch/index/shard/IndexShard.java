@@ -768,6 +768,12 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
 
                 changeState(IndexShardState.STARTED, "global state is [" + newRouting.state() + "]");
 
+                // Activate primary mode before flush to ensure remote store uploads work
+                if (newRouting.primary() && !replicationTracker.isPrimaryMode()) {
+                    replicationTracker.activatePrimaryMode(getLocalCheckpoint());
+                    postActivatePrimaryMode();
+                }
+
                 // Flush here after relocation of primary, so that replica get all changes from new primary rather than waiting for more
                 // docs to get indexed.
                 if (indexSettings.isSegRepEnabledOrRemoteNode()) {
@@ -794,6 +800,12 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
                 if (newPrimaryTerm == pendingPrimaryTerm) {
                     if (currentRouting.initializing() && currentRouting.isRelocationTarget() == false && newRouting.active()) {
                         // the cluster-manager started a recovering primary, activate primary mode.
+                        if (!replicationTracker.isPrimaryMode()) {
+                            replicationTracker.activatePrimaryMode(getLocalCheckpoint());
+                            postActivatePrimaryMode();
+                        }
+                    } else if (state == IndexShardState.STARTED && newRouting.active() && !replicationTracker.isPrimaryMode()) {
+                        // Shard reached STARTED before routing became active - activate primary mode now
                         replicationTracker.activatePrimaryMode(getLocalCheckpoint());
                         postActivatePrimaryMode();
                     }
