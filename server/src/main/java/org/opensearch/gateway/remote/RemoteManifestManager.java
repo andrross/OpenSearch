@@ -108,7 +108,7 @@ public class RemoteManifestManager {
                 .stateVersion(clusterState.getVersion())
                 .clusterUUID(clusterState.metadata().clusterUUID())
                 .stateUUID(clusterState.stateUUID())
-                .opensearchVersion(Version.CURRENT)
+                .opensearchVersion(clusterState.nodes().getMinNodeVersion())
                 .nodeId(nodeId)
                 .committed(committed)
                 .codecVersion(ClusterMetadataManifest.MANIFEST_CURRENT_CODEC_VERSION)

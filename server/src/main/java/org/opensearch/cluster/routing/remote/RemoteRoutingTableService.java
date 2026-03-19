@@ -55,7 +55,8 @@ public interface RemoteRoutingTableService extends LifecycleComponent {
         long term,
         long version,
         IndexRoutingTable indexRouting,
-        LatchedActionListener<ClusterMetadataManifest.UploadedMetadata> latchedActionListener
+        LatchedActionListener<ClusterMetadataManifest.UploadedMetadata> latchedActionListener,
+        Version openSearchVersion
     );
 
     void getAsyncIndexRoutingDiffWriteAction(
@@ -63,7 +64,8 @@ public interface RemoteRoutingTableService extends LifecycleComponent {
         long term,
         long version,
         StringKeyDiffProvider<IndexRoutingTable> routingTableDiff,
-        LatchedActionListener<ClusterMetadataManifest.UploadedMetadata> latchedActionListener
+        LatchedActionListener<ClusterMetadataManifest.UploadedMetadata> latchedActionListener,
+        Version openSearchVersion
     );
 
     List<ClusterMetadataManifest.UploadedIndexMetadata> getAllUploadedIndicesRouting(

@@ -45,14 +45,19 @@ public class RemoteIndexRoutingTable extends AbstractClusterMetadataWriteableBlo
         String clusterUUID,
         Compressor compressor,
         long term,
-        long version
+        long version,
+        Version openSearchVersion
     ) {
         super(clusterUUID, compressor);
         this.index = indexRoutingTable.getIndex();
         this.indexRoutingTable = indexRoutingTable;
         this.term = term;
         this.version = version;
-        this.indexRoutingTableFormat = new ChecksumWritableBlobStoreFormat<>("index-routing-table", IndexRoutingTable::readFrom);
+        this.indexRoutingTableFormat = new ChecksumWritableBlobStoreFormat<>(
+            "index-routing-table",
+            IndexRoutingTable::readFrom,
+            openSearchVersion
+        );
     }
 
     /**

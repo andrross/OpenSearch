@@ -69,7 +69,7 @@ public class RemoteDiscoveryNodesTests extends OpenSearchTestCase {
 
     public void testClusterUUID() {
         DiscoveryNodes nodes = getDiscoveryNodes();
-        RemoteDiscoveryNodes remoteObjectForUpload = new RemoteDiscoveryNodes(nodes, METADATA_VERSION, clusterUUID, compressor);
+        RemoteDiscoveryNodes remoteObjectForUpload = new RemoteDiscoveryNodes(nodes, METADATA_VERSION, clusterUUID, compressor, Version.CURRENT);
         assertEquals(remoteObjectForUpload.clusterUUID(), clusterUUID);
 
         RemoteDiscoveryNodes remoteObjectForDownload = new RemoteDiscoveryNodes(TEST_BLOB_NAME, clusterUUID, compressor, Version.CURRENT);
@@ -78,7 +78,7 @@ public class RemoteDiscoveryNodesTests extends OpenSearchTestCase {
 
     public void testFullBlobName() {
         DiscoveryNodes nodes = getDiscoveryNodes();
-        RemoteDiscoveryNodes remoteObjectForUpload = new RemoteDiscoveryNodes(nodes, METADATA_VERSION, clusterUUID, compressor);
+        RemoteDiscoveryNodes remoteObjectForUpload = new RemoteDiscoveryNodes(nodes, METADATA_VERSION, clusterUUID, compressor, Version.CURRENT);
         assertNull(remoteObjectForUpload.getFullBlobName());
 
         RemoteDiscoveryNodes remoteObjectForDownload = new RemoteDiscoveryNodes(TEST_BLOB_NAME, clusterUUID, compressor, Version.CURRENT);
@@ -87,7 +87,7 @@ public class RemoteDiscoveryNodesTests extends OpenSearchTestCase {
 
     public void testBlobFileName() {
         DiscoveryNodes nodes = getDiscoveryNodes();
-        RemoteDiscoveryNodes remoteObjectForUpload = new RemoteDiscoveryNodes(nodes, METADATA_VERSION, clusterUUID, compressor);
+        RemoteDiscoveryNodes remoteObjectForUpload = new RemoteDiscoveryNodes(nodes, METADATA_VERSION, clusterUUID, compressor, Version.CURRENT);
         assertNull(remoteObjectForUpload.getBlobFileName());
 
         RemoteDiscoveryNodes remoteObjectForDownload = new RemoteDiscoveryNodes(TEST_BLOB_NAME, clusterUUID, compressor, Version.CURRENT);
@@ -102,7 +102,7 @@ public class RemoteDiscoveryNodesTests extends OpenSearchTestCase {
 
     public void testBlobPathParameters() {
         DiscoveryNodes nodes = getDiscoveryNodes();
-        RemoteDiscoveryNodes remoteObjectForUpload = new RemoteDiscoveryNodes(nodes, METADATA_VERSION, clusterUUID, compressor);
+        RemoteDiscoveryNodes remoteObjectForUpload = new RemoteDiscoveryNodes(nodes, METADATA_VERSION, clusterUUID, compressor, Version.CURRENT);
         BlobPathParameters params = remoteObjectForUpload.getBlobPathParameters();
         assertEquals(params.getPathTokens(), List.of(CLUSTER_STATE_EPHEMERAL_PATH_TOKEN));
         assertEquals(params.getFilePrefix(), DISCOVERY_NODES);
@@ -110,7 +110,7 @@ public class RemoteDiscoveryNodesTests extends OpenSearchTestCase {
 
     public void testGenerateBlobFileName() {
         DiscoveryNodes nodes = getDiscoveryNodes();
-        RemoteDiscoveryNodes remoteObjectForUpload = new RemoteDiscoveryNodes(nodes, METADATA_VERSION, clusterUUID, compressor);
+        RemoteDiscoveryNodes remoteObjectForUpload = new RemoteDiscoveryNodes(nodes, METADATA_VERSION, clusterUUID, compressor, Version.CURRENT);
         String blobFileName = remoteObjectForUpload.generateBlobFileName();
         String[] nameTokens = blobFileName.split(RemoteClusterStateUtils.DELIMITER);
         assertEquals(nameTokens[0], DISCOVERY_NODES);
@@ -121,7 +121,7 @@ public class RemoteDiscoveryNodesTests extends OpenSearchTestCase {
 
     public void testGetUploadedMetadata() throws IOException {
         DiscoveryNodes nodes = getDiscoveryNodes();
-        RemoteDiscoveryNodes remoteObjectForUpload = new RemoteDiscoveryNodes(nodes, METADATA_VERSION, clusterUUID, compressor);
+        RemoteDiscoveryNodes remoteObjectForUpload = new RemoteDiscoveryNodes(nodes, METADATA_VERSION, clusterUUID, compressor, Version.CURRENT);
         assertThrows(AssertionError.class, remoteObjectForUpload::getUploadedMetadata);
         remoteObjectForUpload.setFullBlobName(new BlobPath().add(TEST_BLOB_PATH));
         ClusterMetadataManifest.UploadedMetadata uploadedMetadata = remoteObjectForUpload.getUploadedMetadata();
@@ -131,7 +131,7 @@ public class RemoteDiscoveryNodesTests extends OpenSearchTestCase {
 
     public void testSerDe() throws IOException {
         DiscoveryNodes nodes = getDiscoveryNodes();
-        RemoteDiscoveryNodes remoteObjectForUpload = new RemoteDiscoveryNodes(nodes, METADATA_VERSION, clusterUUID, compressor);
+        RemoteDiscoveryNodes remoteObjectForUpload = new RemoteDiscoveryNodes(nodes, METADATA_VERSION, clusterUUID, compressor, Version.CURRENT);
         try (InputStream inputStream = remoteObjectForUpload.serialize()) {
             remoteObjectForUpload.setFullBlobName(BlobPath.cleanPath());
             assertTrue(inputStream.available() > 0);
@@ -144,7 +144,7 @@ public class RemoteDiscoveryNodesTests extends OpenSearchTestCase {
 
     public void testExceptionDuringSerialization() throws IOException {
         DiscoveryNodes nodes = mock(DiscoveryNodes.class);
-        RemoteDiscoveryNodes remoteObjectForUpload = new RemoteDiscoveryNodes(nodes, METADATA_VERSION, clusterUUID, compressor);
+        RemoteDiscoveryNodes remoteObjectForUpload = new RemoteDiscoveryNodes(nodes, METADATA_VERSION, clusterUUID, compressor, Version.CURRENT);
         doThrow(new IOException("mock-exception")).when(nodes).writeToWithAttribute(any());
         IOException iea = assertThrows(IOException.class, remoteObjectForUpload::serialize);
     }

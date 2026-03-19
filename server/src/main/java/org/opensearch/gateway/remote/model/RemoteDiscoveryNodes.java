@@ -42,12 +42,13 @@ public class RemoteDiscoveryNodes extends AbstractClusterMetadataWriteableBlobEn
         final DiscoveryNodes discoveryNodes,
         final long stateVersion,
         final String clusterUUID,
-        final Compressor compressor
+        final Compressor compressor,
+        final Version version
     ) {
         super(clusterUUID, compressor, null);
         this.discoveryNodes = discoveryNodes;
         this.stateVersion = stateVersion;
-        this.discoveryNodesFormat = new ChecksumWritableBlobStoreFormat<>("nodes", is -> DiscoveryNodes.readFrom(is, null));
+        this.discoveryNodesFormat = new ChecksumWritableBlobStoreFormat<>("nodes", is -> DiscoveryNodes.readFrom(is, null), version);
     }
 
     public RemoteDiscoveryNodes(final String blobName, final String clusterUUID, final Compressor compressor, final Version version) {

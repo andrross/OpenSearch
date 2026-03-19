@@ -91,8 +91,7 @@ public class ChecksumWritableBlobStoreFormat<T extends Writeable> {
                         // in order to write the footer we need to prevent closing the actual index input.
                     }
                 }; StreamOutput stream = new OutputStreamStreamOutput(compressor.threadLocalOutputStream(indexOutputOutputStream));) {
-                    // TODO The stream version should be configurable
-                    stream.setVersion(Version.CURRENT);
+                    stream.setVersion(opensearchVersion);
                     writer.write(stream, obj);
                 }
                 CodecUtil.writeFooter(indexOutput);

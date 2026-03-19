@@ -64,13 +64,14 @@ public class RemoteRoutingTableDiff extends AbstractClusterMetadataWriteableBlob
         String clusterUUID,
         Compressor compressor,
         long term,
-        long version
+        long version,
+        Version openSearchVersion
     ) {
         super(clusterUUID, compressor);
         this.routingTableIncrementalDiff = routingTableIncrementalDiff;
         this.term = term;
         this.version = version;
-        this.remoteRoutingTableDiffFormat = new ChecksumWritableBlobStoreFormat<>(codec, RoutingTableIncrementalDiff::readFrom);
+        this.remoteRoutingTableDiffFormat = new ChecksumWritableBlobStoreFormat<>(codec, RoutingTableIncrementalDiff::readFrom, openSearchVersion);
     }
 
     /**

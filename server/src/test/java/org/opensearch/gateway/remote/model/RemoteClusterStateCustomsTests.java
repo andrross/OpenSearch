@@ -8,6 +8,7 @@
 
 package org.opensearch.gateway.remote.model;
 
+import org.opensearch.Version;
 import org.opensearch.cluster.ClusterState.Custom;
 import org.opensearch.cluster.SnapshotsInProgress;
 import org.opensearch.common.blobstore.BlobPath;
@@ -92,7 +93,8 @@ public class RemoteClusterStateCustomsTests extends OpenSearchTestCase {
             STATE_VERSION,
             clusterUUID,
             compressor,
-            namedWriteableRegistry
+            namedWriteableRegistry,
+            Version.CURRENT
         );
         assertThat(remoteObjectForUpload.clusterUUID(), is(clusterUUID));
 
@@ -115,7 +117,8 @@ public class RemoteClusterStateCustomsTests extends OpenSearchTestCase {
             STATE_VERSION,
             clusterUUID,
             compressor,
-            namedWriteableRegistry
+            namedWriteableRegistry,
+            Version.CURRENT
         );
         assertThat(remoteObjectForUpload.getFullBlobName(), nullValue());
 
@@ -138,7 +141,8 @@ public class RemoteClusterStateCustomsTests extends OpenSearchTestCase {
             STATE_VERSION,
             clusterUUID,
             compressor,
-            namedWriteableRegistry
+            namedWriteableRegistry,
+            Version.CURRENT
         );
         assertThat(remoteObjectForUpload.getBlobFileName(), nullValue());
 
@@ -174,7 +178,8 @@ public class RemoteClusterStateCustomsTests extends OpenSearchTestCase {
             STATE_VERSION,
             clusterUUID,
             compressor,
-            namedWriteableRegistry
+            namedWriteableRegistry,
+            Version.CURRENT
         );
         BlobPathParameters params = remoteObjectForUpload.getBlobPathParameters();
         assertThat(params.getPathTokens(), is(List.of(RemoteClusterStateUtils.CLUSTER_STATE_EPHEMERAL_PATH_TOKEN)));
@@ -190,7 +195,8 @@ public class RemoteClusterStateCustomsTests extends OpenSearchTestCase {
             STATE_VERSION,
             clusterUUID,
             compressor,
-            namedWriteableRegistry
+            namedWriteableRegistry,
+            Version.CURRENT
         );
         String blobFileName = remoteObjectForUpload.generateBlobFileName();
         String[] nameTokens = blobFileName.split(RemoteClusterStateUtils.DELIMITER);
@@ -210,7 +216,8 @@ public class RemoteClusterStateCustomsTests extends OpenSearchTestCase {
             STATE_VERSION,
             clusterUUID,
             compressor,
-            namedWriteableRegistry
+            namedWriteableRegistry,
+            Version.CURRENT
         );
         assertThrows(AssertionError.class, remoteObjectForUpload::getUploadedMetadata);
 
@@ -231,7 +238,8 @@ public class RemoteClusterStateCustomsTests extends OpenSearchTestCase {
             STATE_VERSION,
             clusterUUID,
             compressor,
-            namedWriteableRegistry
+            namedWriteableRegistry,
+            Version.CURRENT
         );
         try (InputStream inputStream = remoteObjectForUpload.serialize()) {
             remoteObjectForUpload.setFullBlobName(BlobPath.cleanPath());
