@@ -1,0 +1,70 @@
+## Version 3.6.0 Release Notes
+
+Compatible with OpenSearch and OpenSearch Dashboards version 3.6.0
+
+### Added
+- Add Scroll API support for Workload Management rule-based autotagging ([#20151](https://github.com/opensearch-project/OpenSearch/pull/20151))
+- Add intra-segment support for single-value metric aggregations ([#20503](https://github.com/opensearch-project/OpenSearch/pull/20503))
+- Add warmup phase for pull-based ingestion ([#20526](https://github.com/opensearch-project/OpenSearch/pull/20526))
+- Add custom search settings support for Workload Management groups ([#20536](https://github.com/opensearch-project/OpenSearch/pull/20536))
+- Add indices to search request slowlog ([#20588](https://github.com/opensearch-project/OpenSearch/pull/20588))
+- Add bitmap64 query support ([#20606](https://github.com/opensearch-project/OpenSearch/pull/20606))
+- Add IndexWarmer support for replica shards with segment replication enabled ([#20650](https://github.com/opensearch-project/OpenSearch/pull/20650))
+- Support Docker distribution builds for ppc64le, arm64, and s390x ([#20678](https://github.com/opensearch-project/OpenSearch/pull/20678))
+- Fall back to Netty client when AWS CRT client is unavailable on the target platform ([#20698](https://github.com/opensearch-project/OpenSearch/pull/20698))
+- Add TLS certificate hot-reload for Arrow Flight transport ([#20700](https://github.com/opensearch-project/OpenSearch/pull/20700))
+- Add mapper_settings support and field_mapping mapper type for pull-based ingestion ([#20722](https://github.com/opensearch-project/OpenSearch/pull/20722), [#20729](https://github.com/opensearch-project/OpenSearch/pull/20729))
+- Add ref_path support for package-based Hunspell dictionary loading ([#20840](https://github.com/opensearch-project/OpenSearch/pull/20840))
+- Add node-level JVM and CPU runtime metrics ([#20844](https://github.com/opensearch-project/OpenSearch/pull/20844))
+
+### Changed
+- Choose the best performing node when writing with append-only indices ([#20065](https://github.com/opensearch-project/OpenSearch/pull/20065))
+- Prevent criteria update for context-aware indices ([#20250](https://github.com/opensearch-project/OpenSearch/pull/20250))
+- Support expected remote cluster name in cross-cluster search sniff mode ([#20532](https://github.com/opensearch-project/OpenSearch/pull/20532))
+- Expose wrapped scorer in ProfileScorer for scorer tree visibility ([#20607](https://github.com/opensearch-project/OpenSearch/pull/20607))
+- Harden detection of HTTP/3 support by verifying QUIC native library availability ([#20680](https://github.com/opensearch-project/OpenSearch/pull/20680))
+- Leverage segment-global ordinal mapping for more efficient terms aggregation ([#20683](https://github.com/opensearch-project/OpenSearch/pull/20683))
+- Delegate getMin/getMax methods for ExitableTerms ([#20775](https://github.com/opensearch-project/OpenSearch/pull/20775))
+
+### Removed
+- Remove experimental tag for pull-based ingestion ([#20704](https://github.com/opensearch-project/OpenSearch/pull/20704))
+
+### Fixed
+- Fix synonym_graph filter failure with word_delimiter_graph when using whitespace or classic tokenizer ([#19248](https://github.com/opensearch-project/OpenSearch/pull/19248))
+- Fix CriteriaBasedCodec to work with delegate codec ([#20442](https://github.com/opensearch-project/OpenSearch/pull/20442))
+- Relax updatedAt validation for Workload Management workload group creation ([#20486](https://github.com/opensearch-project/OpenSearch/pull/20486))
+- Fix listBlobsByPrefixInSortedOrder in EncryptedBlobContainer to adhere to limit parameter ([#20514](https://github.com/opensearch-project/OpenSearch/pull/20514))
+- Add range validations in query builder and field mapper ([#20518](https://github.com/opensearch-project/OpenSearch/pull/20518))
+- Fix copy_to functionality for geo_point fields with object and array values ([#20542](https://github.com/opensearch-project/OpenSearch/pull/20542))
+- Fix segment replication infinite retry due to stale metadata checkpoint ([#20551](https://github.com/opensearch-project/OpenSearch/pull/20551))
+- Fix SecurityException when changing opensearch.cgroups.hierarchy.override ([#20565](https://github.com/opensearch-project/OpenSearch/pull/20565))
+- Implement batched deletions of stale ClusterMetadataManifests in remote store ([#20566](https://github.com/opensearch-project/OpenSearch/pull/20566))
+- Fix SLF4J component error ([#20587](https://github.com/opensearch-project/OpenSearch/pull/20587))
+- Fix service startup failure on Windows with OpenJDK by updating procrun to 1.5.1 ([#20615](https://github.com/opensearch-project/OpenSearch/pull/20615))
+- Fix regression in terms aggregation optimization ([#20623](https://github.com/opensearch-project/OpenSearch/pull/20623))
+- Handle ShardSearchFailure properly in gRPC transport ([#20641](https://github.com/opensearch-project/OpenSearch/pull/20641))
+- Add accessUnixDomainSocket permission for gRPC transport ([#20649](https://github.com/opensearch-project/OpenSearch/pull/20649))
+- Fix collision of index patterns ([#20702](https://github.com/opensearch-project/OpenSearch/pull/20702))
+- Fix stream transport TLS cert hot-reload by using live SSLContext from SecureTransportSettingsProvider ([#20734](https://github.com/opensearch-project/OpenSearch/pull/20734))
+- Show heap percent threshold in search task cancellation message ([#20779](https://github.com/opensearch-project/OpenSearch/pull/20779))
+- Fix JSON escaping in task details log metadata ([#20802](https://github.com/opensearch-project/OpenSearch/pull/20802))
+- Fix field_caps returning empty results for disable_objects mappings ([#20814](https://github.com/opensearch-project/OpenSearch/pull/20814))
+- Fix terms lookup subquery to use cluster max_clause_count setting ([#20823](https://github.com/opensearch-project/OpenSearch/pull/20823))
+- Fix array_index_out_of_bounds_exception with wildcard and aggregations ([#20842](https://github.com/opensearch-project/OpenSearch/pull/20842))
+
+### Dependencies
+- Bump Apache Lucene from 10.3.2 to 10.4.0 ([#20735](https://github.com/opensearch-project/OpenSearch/pull/20735))
+- Bump Netty to 4.2.10.Final ([#20586](https://github.com/opensearch-project/OpenSearch/pull/20586))
+- Bump Project Reactor to 3.8.4 and Reactor Netty to 1.3.4 ([#20589](https://github.com/opensearch-project/OpenSearch/pull/20589), [#20834](https://github.com/opensearch-project/OpenSearch/pull/20834))
+- Bump OpenTelemetry to 1.60.1 and OpenTelemetry Semconv to 1.40.0 ([#20737](https://github.com/opensearch-project/OpenSearch/pull/20737), [#20797](https://github.com/opensearch-project/OpenSearch/pull/20797))
+- Bump shadow-gradle-plugin from 8.3.9 to 9.3.1 ([#20569](https://github.com/opensearch-project/OpenSearch/pull/20569))
+- Bump org.jruby.joni:joni from 2.2.3 to 2.2.7 ([#20714](https://github.com/opensearch-project/OpenSearch/pull/20714), [#20759](https://github.com/opensearch-project/OpenSearch/pull/20759))
+- Bump org.jruby.jcodings:jcodings from 1.0.63 to 1.0.64 ([#20713](https://github.com/opensearch-project/OpenSearch/pull/20713))
+- Bump org.tukaani:xz from 1.11 to 1.12 ([#20760](https://github.com/opensearch-project/OpenSearch/pull/20760))
+- Bump com.netflix.nebula.ospackage-base from 12.2.0 to 12.3.0 ([#20799](https://github.com/opensearch-project/OpenSearch/pull/20799))
+- Bump com.netflix.nebula:gradle-info-plugin to 16.2.1 ([#20825](https://github.com/opensearch-project/OpenSearch/pull/20825))
+- Bump com.nimbusds:nimbus-jose-jwt from 10.7 to 10.8 ([#20715](https://github.com/opensearch-project/OpenSearch/pull/20715))
+- Bump org.apache.commons:commons-text from 1.14.0 to 1.15.0 ([#20576](https://github.com/opensearch-project/OpenSearch/pull/20576))
+- Bump ch.qos.logback:logback-core from 1.5.24 to 1.5.27 ([#20525](https://github.com/opensearch-project/OpenSearch/pull/20525))
+- Bump ch.qos.logback:logback-classic from 1.5.27 to 1.5.32 ([#20761](https://github.com/opensearch-project/OpenSearch/pull/20761))
+- Bump org.jline:jline from 3.30.6 to 4.0.0 ([#20800](https://github.com/opensearch-project/OpenSearch/pull/20800))
