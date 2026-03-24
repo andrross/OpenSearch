@@ -98,6 +98,10 @@ public class InternalDistributionDownloadPlugin implements Plugin<Project> {
         }));
 
         resolutions.register("bwc", distributionResolution -> distributionResolution.setResolver((project, distribution) -> {
+            // When bwc.useSnapshots is set, skip local builds and download pre-built SNAPSHOT artifacts instead
+            if (Boolean.parseBoolean(System.getProperty("bwc.useSnapshots", "false"))) {
+                return null;
+            }
             BwcVersions.UnreleasedVersionInfo unreleasedInfo = bwcVersions.unreleasedInfo(Version.fromString(distribution.getVersion()));
             if (unreleasedInfo != null) {
                 if (distribution.getBundledJdk() == JavaPackageType.NONE) {

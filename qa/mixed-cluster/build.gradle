@@ -61,7 +61,7 @@ for (Version bwcVersion : BuildParams.bwcVersions.wireCompatible) {
      the nodes has a different minor.  */
   testClusters {
     "${baseName}" {
-      versions = [bwcVersion.toString(), project.version]
+      versions = [BuildParams.bwcVersions.versionString(bwcVersion), project.version]
       numberOfNodes = 4
 
       setting 'path.repo', "${buildDir}/cluster/shared/repo/${baseName}"

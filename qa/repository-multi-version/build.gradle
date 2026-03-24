@@ -54,7 +54,7 @@ for (Version bwcVersion : BuildParams.bwcVersions.indexCompatible) {
   }
 
   testClusters {
-    "${oldClusterName}" clusterSettings(bwcVersion.toString())
+    "${oldClusterName}" clusterSettings(BuildParams.bwcVersions.versionString(bwcVersion))
     "${newClusterName}" clusterSettings(project.version)
   }
 

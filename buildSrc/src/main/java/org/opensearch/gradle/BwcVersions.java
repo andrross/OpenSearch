@@ -193,6 +193,18 @@ public class BwcVersions {
         return unreleased.get(version);
     }
 
+    /**
+     * Returns the version string for use in distribution resolution. When {@code bwc.useSnapshots}
+     * is set, unreleased versions get a "-SNAPSHOT" suffix so they resolve from the snapshot
+     * artifact repository instead of being built from source.
+     */
+    public String versionString(Version version) {
+        if (Boolean.parseBoolean(System.getProperty("bwc.useSnapshots", "false")) && unreleased.containsKey(version)) {
+            return version + "-SNAPSHOT";
+        }
+        return version.toString();
+    }
+
     public void forPreviousUnreleased(Consumer<UnreleasedVersionInfo> consumer) {
         List<UnreleasedVersionInfo> collect = getUnreleased().stream()
             .filter(version -> version.equals(currentVersion) == false)
