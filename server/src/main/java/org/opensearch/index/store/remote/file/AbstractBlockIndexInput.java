@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.lang.ref.Cleaner;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -83,6 +84,20 @@ public abstract class AbstractBlockIndexInput extends IndexInput implements Rand
     private final BlockHolder blockHolder = new BlockHolder();
     protected final Cleaner.Cleanable cleanable;
 
+    /**
+     * Optional callback for tracking this input during searchable snapshot restore.
+     * When set, slices and clones propagate the tracker so all derived inputs
+     * can be unpinned after recovery completes.
+     */
+    protected Consumer<AbstractBlockIndexInput> blockTracker;
+
+    /**
+     * Sets a tracker callback that will be propagated to slices and clones.
+     */
+    public void setBlockTracker(Consumer<AbstractBlockIndexInput> blockTracker) {
+        this.blockTracker = blockTracker;
+    }
+
     protected AbstractBlockIndexInput(Builder builder) {
         super(builder.resourceDescription);
         this.isClone = builder.isClone;
@@ -133,6 +148,21 @@ public abstract class AbstractBlockIndexInput extends IndexInput implements Rand
     @Override
     public void close() throws IOException {
         blockHolder.close();
+        currentBlockId = 0;
+    }
+
+    /**
+     * Releases the currently held block without closing this input.
+     * The input remains functional — the next read will re-fetch the block
+     * from local disk.
+     */
+    public void unpinBlock() {
+        if (blockHolder.block == null) return;
+        try {
+            blockHolder.close();
+        } catch (IOException e) {
+            logger.warn("Exception unpinning block for [{}]", this, e);
+        }
         currentBlockId = 0;
     }
 

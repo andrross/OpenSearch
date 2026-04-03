@@ -39,6 +39,7 @@ import org.apache.lucene.index.SegmentInfos;
 import org.apache.lucene.index.SoftDeletesDirectoryReaderWrapper;
 import org.apache.lucene.search.ReferenceManager;
 import org.apache.lucene.store.Directory;
+import org.apache.lucene.store.FilterDirectory;
 import org.apache.lucene.store.Lock;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.common.concurrent.GatedCloseable;
@@ -48,6 +49,8 @@ import org.opensearch.common.util.io.IOUtils;
 import org.opensearch.index.seqno.SeqNoStats;
 import org.opensearch.index.seqno.SequenceNumbers;
 import org.opensearch.index.store.Store;
+import org.opensearch.index.store.remote.directory.BlockUnpinningDirectory;
+import org.opensearch.index.store.remote.directory.RemoteSnapshotDirectory;
 import org.opensearch.index.translog.DefaultTranslogDeletionPolicy;
 import org.opensearch.index.translog.NoOpTranslogManager;
 import org.opensearch.index.translog.Translog;
@@ -138,8 +141,20 @@ public class ReadOnlyEngine extends Engine {
                     ensureMaxSeqNoEqualsToGlobalCheckpoint(seqNoStats);
                 }
                 this.seqNoStats = seqNoStats;
-                this.indexCommit = Lucene.getIndexCommit(lastCommittedSegmentInfos, directory);
+                // For searchable snapshots, wrap the directory so we can track and
+                // unpin all file cache blocks fetched during DirectoryReader.open().
+                // After the reader is opened (but before any searches), we release
+                // the hard references so blocks become LRU-evictable.
+                BlockUnpinningDirectory unpinningDirectory = null;
+                if (FilterDirectory.unwrap(directory) instanceof RemoteSnapshotDirectory) {
+                    unpinningDirectory = new BlockUnpinningDirectory(directory);
+                }
+                Directory openDirectory = unpinningDirectory != null ? unpinningDirectory : directory;
+                this.indexCommit = Lucene.getIndexCommit(lastCommittedSegmentInfos, openDirectory);
                 reader = wrapReader(open(indexCommit), readerWrapperFunction);
+                if (unpinningDirectory != null) {
+                    unpinningDirectory.unpinAndStopTracking();
+                }
                 readerManager = new OpenSearchReaderManager(reader);
                 assert translogStats != null || obtainLock : "mutiple translogs instances should not be opened at the same time";
                 this.translogStats = translogStats != null ? translogStats : translogStats(config, lastCommittedSegmentInfos);

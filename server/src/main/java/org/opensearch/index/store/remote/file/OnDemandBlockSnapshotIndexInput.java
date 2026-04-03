@@ -121,7 +121,7 @@ public class OnDemandBlockSnapshotIndexInput extends AbstractBlockIndexInput {
 
     @Override
     protected OnDemandBlockSnapshotIndexInput buildSlice(String sliceDescription, long offset, long length) {
-        return new OnDemandBlockSnapshotIndexInput(
+        OnDemandBlockSnapshotIndexInput slice = new OnDemandBlockSnapshotIndexInput(
             AbstractBlockIndexInput.builder()
                 .blockSizeShift(blockSizeShift)
                 .isClone(true)
@@ -132,6 +132,11 @@ public class OnDemandBlockSnapshotIndexInput extends AbstractBlockIndexInput {
             directory,
             transferManager
         );
+        if (blockTracker != null) {
+            slice.setBlockTracker(blockTracker);
+            blockTracker.accept(slice);
+        }
+        return slice;
     }
 
     @Override
