@@ -195,6 +195,84 @@ public class AbstractBlockIndexInputTests extends OpenSearchTestCase {
         assertEquals(1023, AbstractBlockIndexInput.getBlockOffset(1023, 10));
     }
 
+    public void testUnpinBlockPreservesFilePointer() throws IOException {
+        try (TestAbstractBlockIndexInput indexInput = createTestIndexInput()) {
+            indexInput.seek(500);
+            assertEquals(500, indexInput.getFilePointer());
+
+            indexInput.unpinBlock();
+            assertEquals(500, indexInput.getFilePointer());
+        }
+    }
+
+    public void testReadAfterUnpinResumesFromSamePosition() throws IOException {
+        try (TestAbstractBlockIndexInput indexInput = createTestIndexInput()) {
+            indexInput.seek(500);
+            assertEquals(500, indexInput.getFilePointer());
+
+            indexInput.unpinBlock();
+
+            // readByte should re-fetch the block and resume at position 500
+            indexInput.readByte();
+            assertEquals(501, indexInput.getFilePointer());
+        }
+    }
+
+    public void testReadBytesAfterUnpinResumesFromSamePosition() throws IOException {
+        try (TestAbstractBlockIndexInput indexInput = createTestIndexInput()) {
+            indexInput.seek(100);
+            assertEquals(100, indexInput.getFilePointer());
+
+            indexInput.unpinBlock();
+
+            byte[] buf = new byte[10];
+            indexInput.readBytes(buf, 0, 10);
+            assertEquals(110, indexInput.getFilePointer());
+        }
+    }
+
+    public void testUnpinBlockNoOpWhenNoBlockLoaded() throws IOException {
+        try (TestAbstractBlockIndexInput indexInput = createTestIndexInput()) {
+            assertEquals(0, indexInput.getFilePointer());
+            indexInput.unpinBlock();
+            assertEquals(0, indexInput.getFilePointer());
+        }
+    }
+
+    public void testUnpinBlockTwice() throws IOException {
+        try (TestAbstractBlockIndexInput indexInput = createTestIndexInput()) {
+            indexInput.seek(200);
+            indexInput.unpinBlock();
+            assertEquals(200, indexInput.getFilePointer());
+
+            // Read to re-fetch block, then unpin again
+            indexInput.readByte();
+            assertEquals(201, indexInput.getFilePointer());
+            indexInput.unpinBlock();
+            assertEquals(201, indexInput.getFilePointer());
+
+            indexInput.readByte();
+            assertEquals(202, indexInput.getFilePointer());
+        }
+    }
+
+    public void testUnpinBlockAcrossBlockBoundary() throws IOException {
+        try (TestAbstractBlockIndexInput indexInput = createTestIndexInput()) {
+            // Seek near the end of block 0
+            indexInput.seek(ONE_MB - 1);
+            assertEquals(0, indexInput.getCurrentBlockId());
+
+            indexInput.unpinBlock();
+            assertEquals(ONE_MB - 1, indexInput.getFilePointer());
+
+            // Read should re-fetch block 0, read last byte, then cross into block 1
+            indexInput.readByte();
+            assertEquals(ONE_MB, indexInput.getFilePointer());
+            indexInput.readByte();
+            assertEquals(1, indexInput.getCurrentBlockId());
+        }
+    }
+
     private TestAbstractBlockIndexInput createTestIndexInput() {
         return new TestAbstractBlockIndexInput(false);
     }

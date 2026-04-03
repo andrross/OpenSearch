@@ -154,21 +154,31 @@ public abstract class AbstractBlockIndexInput extends IndexInput implements Rand
     /**
      * Releases the currently held block without closing this input.
      * The input remains functional — the next read will re-fetch the block
-     * from local disk.
+     * from local disk and restore the file pointer to its previous position.
      */
     public void unpinBlock() {
         if (blockHolder.block == null) return;
+        long pos = getFilePointer();
         try {
             blockHolder.close();
         } catch (IOException e) {
             logger.warn("Exception unpinning block for [{}]", this, e);
         }
         currentBlockId = 0;
+        unpinnedPosition = pos;
     }
+
+    /**
+     * Saved file pointer position after {@link #unpinBlock()}, or 0 if not applicable.
+     * Used to restore the position on the next read after a block is unpinned.
+     */
+    private long unpinnedPosition = 0;
 
     @Override
     public long getFilePointer() {
-        if (blockHolder.block == null) return 0L;
+        if (blockHolder.block == null) {
+            return unpinnedPosition;
+        }
         return currentBlockStart() + currentBlockPosition() - offset;
     }
 
@@ -180,8 +190,9 @@ public abstract class AbstractBlockIndexInput extends IndexInput implements Rand
     @Override
     public byte readByte() throws IOException {
         if (blockHolder.block == null) {
-            // seek to the beginning
-            seek(0);
+            // seek to the saved position (after unpin) or the beginning
+            seek(unpinnedPosition);
+            unpinnedPosition = 0;
         } else if (currentBlockPosition() >= blockSize) {
             int blockId = currentBlockId + 1;
             demandBlock(blockId);
@@ -306,8 +317,9 @@ public abstract class AbstractBlockIndexInput extends IndexInput implements Rand
     @Override
     public final void readBytes(byte[] b, int offset, int len) throws IOException {
         if (blockHolder.block == null) {
-            // lazy seek to the beginning
-            seek(0);
+            // lazy seek to the saved position (after unpin) or the beginning
+            seek(unpinnedPosition);
+            unpinnedPosition = 0;
         }
 
         int available = blockSize - currentBlockPosition();

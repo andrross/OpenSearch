@@ -152,7 +152,9 @@ public class OnDemandBlockSnapshotIndexInputTests extends OpenSearchTestCase {
         TestGroup.testReadShortWithPos(blockedSnapshotFile, blockSize);
         TestGroup.testReadIntWithPos(blockedSnapshotFile, blockSize);
         TestGroup.testReadLongWithPos(blockedSnapshotFile, blockSize);
+        TestGroup.testReadLongWithPosWithUnpin(blockedSnapshotFile, blockSize);
         TestGroup.testReadBytes(blockedSnapshotFile, blockSize);
+        TestGroup.testSequentialReadAfterUnpin(blockedSnapshotFile, blockSize);
     }
 
     // create OnDemandBlockSnapshotIndexInput for each block size
@@ -516,6 +518,30 @@ public class OnDemandBlockSnapshotIndexInputTests extends OpenSearchTestCase {
             assertEquals(-5750903000991223760L, blockedSnapshotFile.readLong(blockSize - 4));
         }
 
+        public static void testReadLongWithPosWithUnpin(OnDemandBlockSnapshotIndexInput blockedSnapshotFile, int blockSize) throws IOException {
+            assertEquals(-5750903000991223760L, blockedSnapshotFile.readLong(0));
+
+            blockedSnapshotFile.unpinBlock();
+
+            // 7 byte in block 0, 1 byte in block 1
+            assertEquals(3508357643010846896L, blockedSnapshotFile.readLong(blockSize - 7));
+
+            blockedSnapshotFile.unpinBlock();
+
+            // 6 byte in block 0, 2 byte in block 2
+            assertEquals(-5750903000991223760L, blockedSnapshotFile.readLong(blockSize - 6));
+
+            blockedSnapshotFile.unpinBlock();
+
+            // 5 byte in block 0, 3 byte in block 3
+            assertEquals(3508357643010846896L, blockedSnapshotFile.readLong(blockSize - 5));
+
+            blockedSnapshotFile.unpinBlock();
+
+            // 4 byte in block 0, 4 block in block 4
+            assertEquals(-5750903000991223760L, blockedSnapshotFile.readLong(blockSize - 4));
+        }
+
         public static void testReadBytes(OnDemandBlockSnapshotIndexInput blockedSnapshotFile, int blockSize) throws IOException {
             byte[] byteArr = new byte[2];
             blockedSnapshotFile.seek(0);
@@ -527,6 +553,42 @@ public class OnDemandBlockSnapshotIndexInputTests extends OpenSearchTestCase {
             blockedSnapshotFile.readBytes(byteArr, 0, 2);
             assertEquals(-80, byteArr[0]);
             assertEquals(48, byteArr[1]);
+        }
+
+        public static void testSequentialReadAfterUnpin(OnDemandBlockSnapshotIndexInput blockedSnapshotFile, int blockSize)
+            throws IOException {
+            // Seek to a known position mid-block and read to establish position
+            blockedSnapshotFile.seek(100);
+            assertEquals(48, blockedSnapshotFile.readByte());  // pos 100 (even) -> 48
+            assertEquals(-80, blockedSnapshotFile.readByte()); // pos 101 (odd) -> -80
+            assertEquals(102, blockedSnapshotFile.getFilePointer());
+
+            // Unpin and verify sequential read resumes from the correct position
+            blockedSnapshotFile.unpinBlock();
+            assertEquals(102, blockedSnapshotFile.getFilePointer());
+            assertEquals(48, blockedSnapshotFile.readByte());  // pos 102 (even) -> 48
+            assertEquals(-80, blockedSnapshotFile.readByte()); // pos 103 (odd) -> -80
+
+            // Seek near block boundary, read, unpin, then read across boundary
+            blockedSnapshotFile.seek(blockSize - 2);
+            assertEquals(48, blockedSnapshotFile.readByte());  // pos blockSize-2 (even) -> 48
+            assertEquals(-80, blockedSnapshotFile.readByte()); // pos blockSize-1 (odd) -> -80
+            blockedSnapshotFile.unpinBlock();
+            // Now at blockSize, which is the start of block 1 — should re-fetch block 1
+            assertEquals(48, blockedSnapshotFile.readByte());  // pos blockSize (even) -> 48
+            assertEquals(-80, blockedSnapshotFile.readByte()); // pos blockSize+1 (odd) -> -80
+
+            // Unpin and verify readBytes works correctly
+            blockedSnapshotFile.seek(200);
+            blockedSnapshotFile.readByte(); // load block
+            blockedSnapshotFile.unpinBlock();
+            byte[] buf = new byte[4];
+            blockedSnapshotFile.readBytes(buf, 0, 4);
+            // pos 201 (odd) -> -80, pos 202 (even) -> 48, pos 203 (odd) -> -80, pos 204 (even) -> 48
+            assertEquals(-80, buf[0]);
+            assertEquals(48, buf[1]);
+            assertEquals(-80, buf[2]);
+            assertEquals(48, buf[3]);
         }
     }
 }
