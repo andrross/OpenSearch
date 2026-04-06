@@ -736,6 +736,40 @@ tasks.register('checkCompatibility', CheckCompatibilityTask) {
   description = 'Checks the compatibility with child components'
 }
 
+// Convenience tasks to run subsets of the full check independently
+def checkPlugins = tasks.register('checkPlugins') {
+  description = 'Runs all checks for plugin subprojects'
+  group = 'verification'
+}
+
+def checkBwc = tasks.register('checkBwc') {
+  description = 'Runs BWC snapshot tests'
+  group = 'verification'
+}
+
+def checkCore = tasks.register('checkCore') {
+  description = 'Runs all checks excluding plugins and BWC tests'
+  group = 'verification'
+}
+
+def bwcProjectPaths = subprojects.findAll {
+  it.path.startsWith(':qa:') && new File(it.projectDir, 'build.gradle').text.contains('bwc-test.gradle')
+}.collect { it.path }.toSet()
+
+subprojects { sub ->
+  sub.plugins.withId('lifecycle-base') {
+    if (sub.path.startsWith(':plugins:')) {
+      checkPlugins.configure { dependsOn "${sub.path}:check" }
+    } else if (bwcProjectPaths.contains(sub.path) == false) {
+      checkCore.configure { dependsOn "${sub.path}:check" }
+    }
+  }
+}
+
+bwcProjectPaths.each { path ->
+  checkBwc.configure { dependsOn "${path}:bwcTestSnapshots" }
+}
+
 allprojects { project ->
   project.afterEvaluate {
     if (project.tasks.findByName('publishToMavenLocal')) {

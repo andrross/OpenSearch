@@ -1,0 +1,40 @@
+name: Parallel Gradle Check
+on:
+  push:
+    branches-ignore:
+      - 'backport/**'
+      - 'create-pull-request/**'
+      - 'dependabot/**'
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gradle-check:
+    strategy:
+      fail-fast: false
+      matrix:
+        task: [checkCore, checkPlugins, checkBwc]
+    name: ${{ matrix.task }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 130
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Run ${{ matrix.task }}
+        run: ./gradlew ${{ matrix.task }} -Dbwc.buildUnreleasedFromSource=false --no-daemon
