@@ -38,8 +38,41 @@ dependencies {
   implementation "com.fasterxml.jackson.core:jackson-databind:${versions.jackson_databind}"
 }
 
+// Resolve protoc binary and well-known type includes for the Rust/substrait build
+def protocConfig = project.configurations.create("protocBinary") {
+  canBeConsumed = false
+  canBeResolved = true
+}
+def protocIncludeConfig = project.configurations.create("protocInclude") {
+  canBeConsumed = false
+  canBeResolved = true
+}
+def protocVersion = libs.versions.protobuf.get()
+def osClassifier = {
+  def os = System.getProperty('os.name').toLowerCase()
+  def arch = System.getProperty('os.arch')
+  if (os.contains('mac')) {
+    return arch.contains('aarch64') ? 'osx-aarch_64' : 'osx-x86_64'
+  } else if (os.contains('linux')) {
+    return arch.contains('aarch64') ? 'linux-aarch_64' : 'linux-x86_64'
+  }
+  return 'linux-x86_64'
+}()
+dependencies {
+  protocBinary("com.google.protobuf:protoc:${protocVersion}:${osClassifier}@exe")
+  protocInclude("com.google.protobuf:protobuf-java:${protocVersion}")
+}
+
+// Extract well-known .proto files from protobuf-java jar
+def protocIncludeDir = layout.buildDirectory.dir("protoc-include")
+task extractProtocIncludes(type: Copy) {
+  from { zipTree(protocIncludeConfig.singleFile) }
+  include 'google/**/*.proto'
+  into protocIncludeDir
+}
+
 // Rust native library build
-task buildRustLibrary(type: Exec) {
+task buildRustLibrary(type: Exec, dependsOn: extractProtocIncludes) {
   description = 'Build the Rust JNI library using Cargo'
   group = 'build'
   workingDir file('jni')
@@ -54,6 +87,8 @@ task buildRustLibrary(type: Exec) {
   commandLine cargoArgs
 
   environment 'CARGO_TARGET_DIR', file('target').absolutePath
+  environment 'PROTOC', protocConfig.singleFile.absolutePath
+  environment 'PROTOC_INCLUDE', protocIncludeDir.get().asFile.absolutePath
   inputs.files fileTree('jni/src')
   inputs.file 'jni/Cargo.toml'
 }
