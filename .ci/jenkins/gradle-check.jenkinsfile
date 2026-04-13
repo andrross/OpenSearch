@@ -144,7 +144,7 @@ pipeline {
                                 bwc_checkout_align = "true"
                             }
 
-                            abortStaleJenkinsJobs(jobName: 'gradle-check', lookupTime: 3)
+                            abortStaleJenkinsJobs(jobName: 'gradle-check-test-only', lookupTime: 3)
 
                             runGradleCheck(
                                 gitRepoUrl: "${pr_from_clone_url}",
