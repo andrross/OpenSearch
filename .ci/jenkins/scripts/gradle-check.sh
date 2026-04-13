@@ -106,7 +106,7 @@ JENKINS_REQ=`curl -s -XPOST \
 echo $PAYLOAD_JSON
 echo $JENKINS_REQ
 
-QUEUE_URL=$(echo $JENKINS_REQ | jq --raw-output '.jobs."gradle-check".url')
+QUEUE_URL=$(echo $JENKINS_REQ | jq --raw-output '.jobs."gradle-check-test-only".url')
 echo QUEUE_URL $QUEUE_URL
 echo "wait for jenkins to start workflow" && sleep 15
 
