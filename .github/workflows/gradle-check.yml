@@ -71,7 +71,7 @@ jobs:
       - name: Checkout OpenSearch repo
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: 'main'
 
       - name: Setup environment variables (PR)
         if: github.event_name == 'pull_request_target'
