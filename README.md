@@ -56,3 +56,4 @@ OpenSearch is a registered trademark of LF Projects, LLC.
 
 OpenSearch includes certain Apache-licensed Elasticsearch code from Elasticsearch B.V. and other source code. Elasticsearch B.V. is not the source of that other source code. ELASTICSEARCH is a registered trademark of Elasticsearch B.V.
 
+

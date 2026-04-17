@@ -1,10 +1,5 @@
 name: Parallel Gradle Check
 on:
-  push:
-    branches-ignore:
-      - 'backport/**'
-      - 'create-pull-request/**'
-      - 'dependabot/**'
   pull_request:
     types: [opened, synchronize, reopened]
 
