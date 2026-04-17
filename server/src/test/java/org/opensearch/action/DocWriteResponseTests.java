@@ -61,6 +61,7 @@ public class DocWriteResponseTests extends OpenSearchTestCase {
             Result.CREATED
         ) {
         };
+        // Hello
         assertEquals("/index/" + MapperService.SINGLE_MAPPING_NAME + "/id", response.getLocation(null));
         assertEquals("/index/" + MapperService.SINGLE_MAPPING_NAME + "/id?routing=test_routing", response.getLocation("test_routing"));
     }
