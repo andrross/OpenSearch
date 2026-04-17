@@ -84,10 +84,7 @@ pipeline {
             printContributedVariables: false,
             printPostContent: false
         )
-        parameterizedCron '''
-            H */2 * * * %GIT_REFERENCE=main;AGENT_LABEL=Jenkins-Agent-Ubuntu2404-X64-M58xlarge-Single-Host
-            H 6 * * * %GIT_REFERENCE=2.19;AGENT_LABEL=Jenkins-Agent-Ubuntu2404-X64-M58xlarge-Single-Host
-        '''
+
     }
     environment {
         BUILD_CAUSE = currentBuild.getBuildCauses()
@@ -140,7 +137,7 @@ pipeline {
                                 currentBuild.description = """runner: ${agent_name}<br><a href="${pr_to_clone_url}">Others</a>: ${pr_title}"""
                             }
                             else {
-                                currentBuild.description = """runner: ${agent_name}<br><a href="${pr_url}">PR #${pr_number}</a>: ${pr_title} with bwc.checkout.align=true"""
+                                currentBuild.description = """runner: ${agent_name}<br><a href="${pr_url}">PR #${pr_number}</a>: ${pr_title} with bwc.checkout.align=true command=${GRADLE_CHECK_COMMAND}"""
                                 bwc_checkout_align = "true"
                             }
 
