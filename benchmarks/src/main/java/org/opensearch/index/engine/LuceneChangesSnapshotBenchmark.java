@@ -74,11 +74,18 @@ import java.util.concurrent.TimeUnit;
  *       decompresses a block with nothing to amortize it against, and a per-document read is cheaper.
  *   <li>{@code INTERLEAVED} - segments flushed concurrently hold interleaved seqNo ranges, so reading in seqNo order
  *       alternates between leaves while each leaf's own docIDs ascend. {@code stride} sets the flush fan-out.
+ *   <li>{@code RANDOM} - seqNos randomly permuted relative to docIDs within one segment, the layout index sorting
+ *       ({@code index.sort.*}) produces: docID order is the sort order, so seqNos are scattered. No read order can
+ *       be both seqNo-ascending and storage-sequential; this is the worst case for a docID-order scan.
  * </ul>
+ *
+ * <p>The {@code impl} parameter selects the snapshot implementation: {@code SEARCH} is {@link LuceneChangesSnapshot}
+ * (seqNo range query, sorted, batched), {@code SCAN} is {@link LuceneSeqNoScanChangesSnapshot} (frontier-chasing
+ * segment scan in docID order).
  *
  * Run a single configuration with, for example:
  * <pre>
- * ./gradlew -p benchmarks run --args 'LuceneChangesSnapshotBenchmark -p layout=CONTIGUOUS -p docSizeBytes=256'
+ * ./gradlew -p benchmarks run --args 'LuceneChangesSnapshotBenchmark -p layout=CONTIGUOUS -p docSizeBytes=256 -p impl=SCAN'
  * </pre>
  */
 @Fork(value = 1, jvmArgsAppend = { "-Xms2g", "-Xmx2g" })
@@ -95,7 +102,14 @@ public class LuceneChangesSnapshotBenchmark {
     public enum Layout {
         CONTIGUOUS,
         STRIDED,
-        INTERLEAVED
+        INTERLEAVED,
+        RANDOM
+    }
+
+    /** Which {@link Translog.Snapshot} implementation drains the changes. */
+    public enum Impl {
+        SEARCH,
+        SCAN
     }
 
     /** Operations read per invocation. Every layout reads this many, only their placement differs. */
@@ -109,8 +123,19 @@ public class LuceneChangesSnapshotBenchmark {
     @Param({ "2" })
     private int stride;
 
-    @Param({ "CONTIGUOUS", "STRIDED", "INTERLEAVED" })
+    @Param({ "CONTIGUOUS", "STRIDED", "INTERLEAVED", "RANDOM" })
     private Layout layout;
+
+    @Param({ "SEARCH", "SCAN" })
+    private Impl impl;
+
+    /**
+     * Byte budget for operations buffered ahead of the frontier; only affects {@code SCAN}. The pathological regime
+     * for {@code RANDOM} is a budget much smaller than the total source bytes in the range, which forces a relocation
+     * (BKD probe plus whole-block decompression) per operation instead of amortizing blocks through the buffer.
+     */
+    @Param({ "4194304" })
+    private long budgetBytes;
 
     @Param({ "256", "2048" })
     private int docSizeBytes;
@@ -147,7 +172,7 @@ public class LuceneChangesSnapshotBenchmark {
      */
     @Benchmark
     public void drainSnapshot(Blackhole bh) throws IOException {
-        try (LuceneChangesSnapshot snapshot = newSnapshot()) {
+        try (Translog.Snapshot snapshot = newSnapshot()) {
             Translog.Operation op;
             while ((op = snapshot.next()) != null) {
                 bh.consume(op);
@@ -155,7 +180,7 @@ public class LuceneChangesSnapshotBenchmark {
         }
     }
 
-    private LuceneChangesSnapshot newSnapshot() throws IOException {
+    private Translog.Snapshot newSnapshot() throws IOException {
         final Engine.Searcher searcher = new Engine.Searcher(
             "benchmark",
             reader,
@@ -164,7 +189,14 @@ public class LuceneChangesSnapshotBenchmark {
             new UsageTrackingQueryCachingPolicy(),
             () -> {} // the reader outlives the snapshot and is closed by tearDown
         );
-        return new LuceneChangesSnapshot(searcher, LuceneChangesSnapshot.DEFAULT_BATCH_SIZE, 0, numOps - 1, true, true);
+        switch (impl) {
+            case SEARCH:
+                return new LuceneChangesSnapshot(searcher, LuceneChangesSnapshot.DEFAULT_BATCH_SIZE, 0, numOps - 1, true, true);
+            case SCAN:
+                return new LuceneSeqNoScanChangesSnapshot(searcher, 0, numOps - 1, true, true, budgetBytes);
+            default:
+                throw new AssertionError(impl);
+        }
     }
 
     private void buildIndex() throws IOException {
@@ -200,6 +232,25 @@ public class LuceneChangesSnapshotBenchmark {
                         writer.commit();
                     }
                     break;
+                case RANDOM: {
+                    // one segment with seqNos randomly permuted relative to docIDs, as index sorting produces.
+                    // Fixed seed so every trial reads the same permutation.
+                    final int[] permutation = new int[numOps];
+                    for (int i = 0; i < numOps; i++) {
+                        permutation[i] = i;
+                    }
+                    final Random shuffler = new Random(42);
+                    for (int i = numOps - 1; i > 0; i--) {
+                        final int j = shuffler.nextInt(i + 1);
+                        final int tmp = permutation[i];
+                        permutation[i] = permutation[j];
+                        permutation[j] = tmp;
+                    }
+                    for (int i = 0; i < numOps; i++) {
+                        writer.addDocument(newDocument(permutation[i]));
+                    }
+                    break;
+                }
                 default:
                     throw new AssertionError(layout);
             }
@@ -263,7 +314,7 @@ public class LuceneChangesSnapshotBenchmark {
             );
         }
         int read = 0;
-        try (LuceneChangesSnapshot snapshot = newSnapshot()) {
+        try (Translog.Snapshot snapshot = newSnapshot()) {
             while (snapshot.next() != null) {
                 read++;
             }
