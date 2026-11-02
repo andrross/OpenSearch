@@ -56,9 +56,16 @@ public abstract class ClusterManagerNodeReadRequest<Request extends ClusterManag
         local = in.readBoolean();
     }
 
+    // Header fields and payload are written by TransportRequest#writeTo; this override only keeps the public method on
+    // this class for binary compatibility.
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
+    }
+
+    @Override
+    protected void writeHeaderFields(StreamOutput out) throws IOException {
+        super.writeHeaderFields(out);
         out.writeBoolean(local);
     }
 

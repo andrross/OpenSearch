@@ -63,8 +63,8 @@ public class ClusterAwarenessAttributeValueHealth implements Writeable, ToXConte
         this.nodeList = nodeList;
     }
 
-    // Constructor use by Unit test case.
-    ClusterAwarenessAttributeValueHealth(
+    // Constructor used by unit tests and conversion from other wire formats.
+    public ClusterAwarenessAttributeValueHealth(
         String name,
         int activeShards,
         int initializingShards,

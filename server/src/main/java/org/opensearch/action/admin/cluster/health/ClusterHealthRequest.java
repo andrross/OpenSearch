@@ -35,148 +35,193 @@ package org.opensearch.action.admin.cluster.health;
 import org.opensearch.Version;
 import org.opensearch.action.ActionRequestValidationException;
 import org.opensearch.action.IndicesRequest;
+import org.opensearch.action.admin.cluster.health.proto.ClusterHealthRequestProto;
 import org.opensearch.action.support.ActiveShardCount;
 import org.opensearch.action.support.IndicesOptions;
 import org.opensearch.action.support.clustermanager.ClusterManagerNodeReadRequest;
+import org.opensearch.action.support.protoaction.ProtoConverters;
 import org.opensearch.cluster.health.ClusterHealthStatus;
 import org.opensearch.common.Priority;
 import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.core.transport.ProtobufPayload;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Objects;
-import java.util.concurrent.TimeUnit;
+import java.util.function.UnaryOperator;
 
 import static org.opensearch.action.ValidateActions.addValidationError;
 
 /**
- * Transport request for requesting cluster health
+ * Transport request for requesting cluster health.
+ * <p>
+ * State is held in a {@link ClusterHealthRequestProto.ClusterHealthRequest} message. Between nodes at or after
+ * {@link #PROTO_SINCE} the message is the wire payload (see {@link ProtobufPayload}); older peers receive the legacy
+ * stream layout, which is frozen in {@link #writeLegacy}/{@link #readLegacy}. The public API of this class is
+ * unchanged.
  *
  * @opensearch.api
  */
 @PublicApi(since = "1.0.0")
-public class ClusterHealthRequest extends ClusterManagerNodeReadRequest<ClusterHealthRequest> implements IndicesRequest.Replaceable {
+public class ClusterHealthRequest extends ClusterManagerNodeReadRequest<ClusterHealthRequest>
+    implements
+        IndicesRequest.Replaceable,
+        ProtobufPayload {
 
-    private String[] indices;
-    private String awarenessAttribute;
-    private IndicesOptions indicesOptions = IndicesOptions.lenientExpandHidden();
-    private TimeValue timeout = new TimeValue(30, TimeUnit.SECONDS);
-    private ClusterHealthStatus waitForStatus;
-    private boolean waitForNoRelocatingShards = false;
-    private boolean waitForNoInitializingShards = false;
-    private ActiveShardCount waitForActiveShards = ActiveShardCount.NONE;
-    private String waitForNodes = "";
-    private Priority waitForEvents = null;
-    private boolean ensureNodeWeighedIn = false;
-    /**
-     * Only used by the high-level REST Client. Controls the details level of the health information returned.
-     * The default value is 'cluster'.
-     */
-    private Level level = Level.CLUSTER;
+    /** First version that encodes this request as protobuf on the wire. */
+    public static final Version PROTO_SINCE = Version.V_3_10_0;
 
-    /**
-     * This flag will be used by the TransportClusterHealthAction to decide if indices/shards info is required in the ClusterHealthResponse or not.
-     * When the flag is disabled - indices/shard info will be returned in ClusterHealthResponse regardless of the health level requested.
-     * When the flag is enabled - indices/shards info will be set according to health level requested.
-     *                  For Level.CLUSTER (or) Level.AWARENESS_ATTRIBUTES - information on indices/shards will NOT be returned to the transport client
-     *                  For Level.INDICES - information on indices will be returned to the transport client.
-     *                  For Level.SHARDS - information on indices and shards will be returned to the transport client
-     * By default, the flag is disabled.
-     */
-    private boolean applyLevelAtTransportLayer = false;
+    private static final TimeValue DEFAULT_TIMEOUT = TimeValue.timeValueSeconds(30);
+    private static final IndicesOptions DEFAULT_INDICES_OPTIONS = IndicesOptions.lenientExpandHidden();
 
-    public ClusterHealthRequest() {}
+    private ClusterHealthRequestProto.ClusterHealthRequest message;
+
+    public ClusterHealthRequest() {
+        this(ClusterHealthRequestProto.ClusterHealthRequest.getDefaultInstance());
+    }
 
     public ClusterHealthRequest(String... indices) {
-        this.indices = indices;
+        this(ClusterHealthRequestProto.ClusterHealthRequest.newBuilder().addAllIndices(Arrays.asList(indices)).build());
+    }
+
+    /** Wrap an existing message. Package-private: callers outside this package use the public constructors and setters. */
+    ClusterHealthRequest(ClusterHealthRequestProto.ClusterHealthRequest message) {
+        this.message = Objects.requireNonNull(message, "message");
     }
 
     public ClusterHealthRequest(StreamInput in) throws IOException {
-        super(in);
-        indices = in.readStringArray();
-        timeout = in.readTimeValue();
-        if (in.readBoolean()) {
-            waitForStatus = ClusterHealthStatus.fromValue(in.readByte());
-        }
-        waitForNoRelocatingShards = in.readBoolean();
-        waitForActiveShards = ActiveShardCount.readFrom(in);
-        waitForNodes = in.readString();
-        if (in.readBoolean()) {
-            waitForEvents = Priority.readFrom(in);
-        }
-        waitForNoInitializingShards = in.readBoolean();
-        indicesOptions = IndicesOptions.readIndicesOptions(in);
-        if (in.getVersion().onOrAfter(Version.V_2_5_0)) {
-            awarenessAttribute = in.readOptionalString();
-            level = in.readEnum(Level.class);
-        }
-        if (in.getVersion().onOrAfter(Version.V_2_6_0)) {
-            ensureNodeWeighedIn = in.readBoolean();
-        }
-        if (in.getVersion().onOrAfter(Version.V_2_17_0)) {
-            applyLevelAtTransportLayer = in.readBoolean();
-        }
+        super(in); // header fields
+        this.message = ProtobufPayload.readPayload(
+            in,
+            PROTO_SINCE,
+            ClusterHealthRequestProto.ClusterHealthRequest::parseFrom,
+            ClusterHealthRequest::readLegacy
+        );
     }
 
+    // header fields and payload are written by TransportRequest#writeTo; kept here for binary compatibility
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
-        if (indices == null) {
-            out.writeVInt(0);
-        } else {
-            out.writeStringArray(indices);
-        }
-        out.writeTimeValue(timeout);
-        if (waitForStatus == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            out.writeByte(waitForStatus.value());
-        }
-        out.writeBoolean(waitForNoRelocatingShards);
-        waitForActiveShards.writeTo(out);
-        out.writeString(waitForNodes);
-        if (waitForEvents == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            Priority.writeTo(waitForEvents, out);
-        }
-        out.writeBoolean(waitForNoInitializingShards);
-        indicesOptions.writeIndicesOptions(out);
-        if (out.getVersion().onOrAfter(Version.V_2_5_0)) {
-            out.writeOptionalString(awarenessAttribute);
-            out.writeEnum(level);
-        }
-        if (out.getVersion().onOrAfter(Version.V_2_6_0)) {
-            out.writeBoolean(ensureNodeWeighedIn);
-        }
-        if (out.getVersion().onOrAfter(Version.V_2_17_0)) {
-            out.writeBoolean(applyLevelAtTransportLayer);
-        }
     }
 
     @Override
+    public Version protobufSince() {
+        return PROTO_SINCE;
+    }
+
+    @Override
+    public byte[] protobufBytes() {
+        return message.toByteArray();
+    }
+
+    /**
+     * The current message. Immutable; setters replace it. Package-private: code outside this class reads the request
+     * through its accessors, which apply defaults and convert to domain types.
+     */
+    ClusterHealthRequestProto.ClusterHealthRequest message() {
+        return message;
+    }
+
+    private ClusterHealthRequest update(UnaryOperator<ClusterHealthRequestProto.ClusterHealthRequest> change) {
+        this.message = Objects.requireNonNull(change.apply(message), "message");
+        return this;
+    }
+
+    @Override
+    public String toString() {
+        return getClass().getSimpleName() + "{" + message + "}";
+    }
+
+    // ----- frozen legacy layout -----
+
+    private static ClusterHealthRequestProto.ClusterHealthRequest readLegacy(StreamInput in) throws IOException {
+        final ClusterHealthRequestProto.ClusterHealthRequest.Builder b = ClusterHealthRequestProto.ClusterHealthRequest.newBuilder();
+        b.addAllIndices(Arrays.asList(in.readStringArray()));
+        b.setTimeout(ProtoConverters.toProto(in.readTimeValue()));
+        if (in.readBoolean()) {
+            b.setWaitForStatus(ProtoConverters.toProto(ClusterHealthStatus.fromValue(in.readByte())));
+        }
+        b.setWaitForNoRelocatingShards(in.readBoolean());
+        b.setWaitForActiveShards(ProtoConverters.toProto(ActiveShardCount.readFrom(in)));
+        b.setWaitForNodes(in.readString());
+        if (in.readBoolean()) {
+            b.setWaitForEvents(ProtoConverters.toProto(Priority.readFrom(in)));
+        }
+        b.setWaitForNoInitializingShards(in.readBoolean());
+        b.setIndicesOptions(ProtoConverters.toProto(IndicesOptions.readIndicesOptions(in)));
+        if (in.getVersion().onOrAfter(Version.V_2_5_0)) {
+            final String awarenessAttribute = in.readOptionalString();
+            if (awarenessAttribute != null) {
+                b.setAwarenessAttribute(awarenessAttribute);
+            }
+            b.setLevel(toProto(in.readEnum(Level.class)));
+        }
+        if (in.getVersion().onOrAfter(Version.V_2_6_0)) {
+            b.setEnsureNodeWeighedIn(in.readBoolean());
+        }
+        if (in.getVersion().onOrAfter(Version.V_2_17_0)) {
+            b.setApplyLevelAtTransportLayer(in.readBoolean());
+        }
+        return b.build();
+    }
+
+    @Override
+    protected void writeLegacy(StreamOutput out) throws IOException {
+        final ClusterHealthRequestProto.ClusterHealthRequest m = message;
+        out.writeStringArray(m.getIndicesList().toArray(new String[0]));
+        out.writeTimeValue(timeout());
+        if (m.hasWaitForStatus()) {
+            out.writeBoolean(true);
+            out.writeByte(ProtoConverters.fromProto(m.getWaitForStatus()).value());
+        } else {
+            out.writeBoolean(false);
+        }
+        out.writeBoolean(m.getWaitForNoRelocatingShards());
+        waitForActiveShards().writeTo(out);
+        out.writeString(m.getWaitForNodes());
+        if (m.hasWaitForEvents()) {
+            out.writeBoolean(true);
+            Priority.writeTo(ProtoConverters.fromProto(m.getWaitForEvents()), out);
+        } else {
+            out.writeBoolean(false);
+        }
+        out.writeBoolean(m.getWaitForNoInitializingShards());
+        indicesOptions().writeIndicesOptions(out);
+        if (out.getVersion().onOrAfter(Version.V_2_5_0)) {
+            out.writeOptionalString(m.hasAwarenessAttribute() ? m.getAwarenessAttribute() : null);
+            out.writeEnum(level());
+        }
+        if (out.getVersion().onOrAfter(Version.V_2_6_0)) {
+            out.writeBoolean(m.getEnsureNodeWeighedIn());
+        }
+        if (out.getVersion().onOrAfter(Version.V_2_17_0)) {
+            out.writeBoolean(m.getApplyLevelAtTransportLayer());
+        }
+    }
+
+    // ----- public API (unchanged) -----
+
+    @Override
     public String[] indices() {
-        return indices;
+        return message().getIndicesList().toArray(new String[0]);
     }
 
     @Override
     public ClusterHealthRequest indices(String... indices) {
-        this.indices = indices;
-        return this;
+        return update(m -> m.toBuilder().clearIndices().addAllIndices(Arrays.asList(indices)).build());
     }
 
     @Override
     public IndicesOptions indicesOptions() {
-        return indicesOptions;
+        return message().hasIndicesOptions() ? ProtoConverters.fromProto(message().getIndicesOptions()) : DEFAULT_INDICES_OPTIONS;
     }
 
     public ClusterHealthRequest indicesOptions(final IndicesOptions indicesOptions) {
-        this.indicesOptions = indicesOptions;
-        return this;
+        return update(m -> m.toBuilder().setIndicesOptions(ProtoConverters.toProto(indicesOptions)).build());
     }
 
     @Override
@@ -185,11 +230,11 @@ public class ClusterHealthRequest extends ClusterManagerNodeReadRequest<ClusterH
     }
 
     public TimeValue timeout() {
-        return timeout;
+        return message().hasTimeout() ? ProtoConverters.fromProto(message().getTimeout()) : DEFAULT_TIMEOUT;
     }
 
     public ClusterHealthRequest timeout(TimeValue timeout) {
-        this.timeout = timeout;
+        update(m -> m.toBuilder().setTimeout(ProtoConverters.toProto(timeout)).build());
         if (clusterManagerNodeTimeout == DEFAULT_CLUSTER_MANAGER_NODE_TIMEOUT) {
             clusterManagerNodeTimeout = timeout;
         }
@@ -201,12 +246,19 @@ public class ClusterHealthRequest extends ClusterManagerNodeReadRequest<ClusterH
     }
 
     public ClusterHealthStatus waitForStatus() {
-        return waitForStatus;
+        return message().hasWaitForStatus() ? ProtoConverters.fromProto(message().getWaitForStatus()) : null;
     }
 
     public ClusterHealthRequest waitForStatus(ClusterHealthStatus waitForStatus) {
-        this.waitForStatus = waitForStatus;
-        return this;
+        return update(m -> {
+            final ClusterHealthRequestProto.ClusterHealthRequest.Builder b = m.toBuilder();
+            if (waitForStatus == null) {
+                b.clearWaitForStatus();
+            } else {
+                b.setWaitForStatus(ProtoConverters.toProto(waitForStatus));
+            }
+            return b.build();
+        });
     }
 
     public ClusterHealthRequest waitForGreenStatus() {
@@ -218,7 +270,7 @@ public class ClusterHealthRequest extends ClusterManagerNodeReadRequest<ClusterH
     }
 
     public boolean waitForNoRelocatingShards() {
-        return waitForNoRelocatingShards;
+        return message().getWaitForNoRelocatingShards();
     }
 
     /**
@@ -228,12 +280,11 @@ public class ClusterHealthRequest extends ClusterManagerNodeReadRequest<ClusterH
      * to wait until the number of relocating shards in the cluster is 0.
      */
     public ClusterHealthRequest waitForNoRelocatingShards(boolean waitForNoRelocatingShards) {
-        this.waitForNoRelocatingShards = waitForNoRelocatingShards;
-        return this;
+        return update(m -> m.toBuilder().setWaitForNoRelocatingShards(waitForNoRelocatingShards).build());
     }
 
     public boolean waitForNoInitializingShards() {
-        return waitForNoInitializingShards;
+        return message().getWaitForNoInitializingShards();
     }
 
     /**
@@ -243,12 +294,16 @@ public class ClusterHealthRequest extends ClusterManagerNodeReadRequest<ClusterH
      * to wait until the number of initializing shards in the cluster is 0.
      */
     public ClusterHealthRequest waitForNoInitializingShards(boolean waitForNoInitializingShards) {
-        this.waitForNoInitializingShards = waitForNoInitializingShards;
-        return this;
+        return update(m -> m.toBuilder().setWaitForNoInitializingShards(waitForNoInitializingShards).build());
     }
 
     public ActiveShardCount waitForActiveShards() {
-        return waitForActiveShards;
+        if (message().hasWaitForActiveShards() == false) {
+            return ActiveShardCount.NONE;
+        }
+        final ActiveShardCount count = ProtoConverters.fromProto(message().getWaitForActiveShards());
+        // the default for cluster health request is 0, not 1
+        return count.equals(ActiveShardCount.DEFAULT) ? ActiveShardCount.NONE : count;
     }
 
     /**
@@ -260,13 +315,11 @@ public class ClusterHealthRequest extends ClusterManagerNodeReadRequest<ClusterH
      * total number of shard copies to wait for.
      */
     public ClusterHealthRequest waitForActiveShards(ActiveShardCount waitForActiveShards) {
-        if (waitForActiveShards.equals(ActiveShardCount.DEFAULT)) {
-            // the default for cluster health request is 0, not 1
-            this.waitForActiveShards = ActiveShardCount.NONE;
-        } else {
-            this.waitForActiveShards = waitForActiveShards;
-        }
-        return this;
+        // the default for cluster health request is 0, not 1
+        final ActiveShardCount effective = waitForActiveShards.equals(ActiveShardCount.DEFAULT)
+            ? ActiveShardCount.NONE
+            : waitForActiveShards;
+        return update(m -> m.toBuilder().setWaitForActiveShards(ProtoConverters.toProto(effective)).build());
     }
 
     /**
@@ -279,24 +332,30 @@ public class ClusterHealthRequest extends ClusterManagerNodeReadRequest<ClusterH
     }
 
     public String waitForNodes() {
-        return waitForNodes;
+        return message().getWaitForNodes();
     }
 
     /**
      * Waits for N number of nodes. Use "12" for exact mapping, "&gt;12" and "&lt;12" for range.
      */
     public ClusterHealthRequest waitForNodes(String waitForNodes) {
-        this.waitForNodes = waitForNodes;
-        return this;
+        return update(m -> m.toBuilder().setWaitForNodes(waitForNodes).build());
     }
 
     public ClusterHealthRequest waitForEvents(Priority waitForEvents) {
-        this.waitForEvents = waitForEvents;
-        return this;
+        return update(m -> {
+            final ClusterHealthRequestProto.ClusterHealthRequest.Builder b = m.toBuilder();
+            if (waitForEvents == null) {
+                b.clearWaitForEvents();
+            } else {
+                b.setWaitForEvents(ProtoConverters.toProto(waitForEvents));
+            }
+            return b.build();
+        });
     }
 
     public Priority waitForEvents() {
-        return this.waitForEvents;
+        return message().hasWaitForEvents() ? ProtoConverters.fromProto(message().getWaitForEvents()) : null;
     }
 
     /**
@@ -304,7 +363,8 @@ public class ClusterHealthRequest extends ClusterManagerNodeReadRequest<ClusterH
      * Only used by the high-level REST Client.
      */
     public void level(Level level) {
-        this.level = Objects.requireNonNull(level, "level must not be null");
+        Objects.requireNonNull(level, "level must not be null");
+        update(m -> m.toBuilder().setLevel(toProto(level)).build());
     }
 
     public void setLevel(String level) {
@@ -328,21 +388,36 @@ public class ClusterHealthRequest extends ClusterManagerNodeReadRequest<ClusterH
      * Only used by the high-level REST Client.
      */
     public Level level() {
-        return level;
+        switch (message().getLevel()) {
+            case LEVEL_INDICES:
+                return Level.INDICES;
+            case LEVEL_SHARDS:
+                return Level.SHARDS;
+            case LEVEL_AWARENESS_ATTRIBUTES:
+                return Level.AWARENESS_ATTRIBUTES;
+            default:
+                return Level.CLUSTER;
+        }
     }
 
     public ClusterHealthRequest setAwarenessAttribute(String awarenessAttribute) {
-        this.awarenessAttribute = awarenessAttribute;
-        return this;
+        return update(m -> {
+            final ClusterHealthRequestProto.ClusterHealthRequest.Builder b = m.toBuilder();
+            if (awarenessAttribute == null) {
+                b.clearAwarenessAttribute();
+            } else {
+                b.setAwarenessAttribute(awarenessAttribute);
+            }
+            return b.build();
+        });
     }
 
     public String getAwarenessAttribute() {
-        return awarenessAttribute;
+        return message().hasAwarenessAttribute() ? message().getAwarenessAttribute() : null;
     }
 
     public final ClusterHealthRequest ensureNodeWeighedIn(boolean ensureNodeWeighedIn) {
-        this.ensureNodeWeighedIn = ensureNodeWeighedIn;
-        return this;
+        return update(m -> m.toBuilder().setEnsureNodeWeighedIn(ensureNodeWeighedIn).build());
     }
 
     /**
@@ -351,28 +426,42 @@ public class ClusterHealthRequest extends ClusterManagerNodeReadRequest<ClusterH
      * <code>false</code> to not check local node if commissioned or not for a local request
      */
     public final boolean ensureNodeWeighedIn() {
-        return ensureNodeWeighedIn;
+        return message().getEnsureNodeWeighedIn();
     }
 
     public boolean isApplyLevelAtTransportLayer() {
-        return applyLevelAtTransportLayer;
+        return message().getApplyLevelAtTransportLayer();
     }
 
     public void setApplyLevelAtTransportLayer(boolean applyLevelAtTransportLayer) {
-        this.applyLevelAtTransportLayer = applyLevelAtTransportLayer;
+        update(m -> m.toBuilder().setApplyLevelAtTransportLayer(applyLevelAtTransportLayer).build());
     }
 
     @Override
     public ActionRequestValidationException validate() {
-        if (level.equals(Level.AWARENESS_ATTRIBUTES) && indices.length > 0) {
+        final Level level = level();
+        if (level == Level.AWARENESS_ATTRIBUTES && message().getIndicesCount() > 0) {
             return addValidationError("awareness_attribute is not a supported parameter with index health", null);
-        } else if (!level.equals(Level.AWARENESS_ATTRIBUTES) && awarenessAttribute != null) {
+        } else if (level != Level.AWARENESS_ATTRIBUTES && message().hasAwarenessAttribute()) {
             return addValidationError("level=awareness_attributes is required with awareness_attribute parameter", null);
         }
-        if (ensureNodeWeighedIn && local == false) {
+        if (ensureNodeWeighedIn() && local() == false) {
             return addValidationError("not a local request to ensure local node commissioned or weighed in", null);
         }
         return null;
+    }
+
+    private static ClusterHealthRequestProto.ClusterHealthRequest.Level toProto(Level level) {
+        switch (level) {
+            case INDICES:
+                return ClusterHealthRequestProto.ClusterHealthRequest.Level.LEVEL_INDICES;
+            case SHARDS:
+                return ClusterHealthRequestProto.ClusterHealthRequest.Level.LEVEL_SHARDS;
+            case AWARENESS_ATTRIBUTES:
+                return ClusterHealthRequestProto.ClusterHealthRequest.Level.LEVEL_AWARENESS_ATTRIBUTES;
+            default:
+                return ClusterHealthRequestProto.ClusterHealthRequest.Level.LEVEL_CLUSTER;
+        }
     }
 
     /**

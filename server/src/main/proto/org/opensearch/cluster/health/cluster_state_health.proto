@@ -1,0 +1,33 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ */
+
+syntax = "proto3";
+package org.opensearch.cluster.health.proto;
+
+import "org/opensearch/cluster/health/cluster_health_status.proto";
+import "org/opensearch/cluster/health/cluster_index_health.proto";
+
+option java_outer_classname = "ClusterStateHealthProto";
+
+// Wire form of org.opensearch.cluster.health.ClusterStateHealth.
+message ClusterStateHealth {
+  optional int32 number_of_nodes = 1;
+  optional int32 number_of_data_nodes = 2;
+  optional bool has_discovered_cluster_manager = 3;
+  optional int32 active_shards = 4;
+  optional int32 relocating_shards = 5;
+  optional int32 active_primary_shards = 6;
+  optional int32 initializing_shards = 7;
+  optional int32 unassigned_shards = 8;
+  // Not carried by the legacy wire format; the legacy reader always sees 0.
+  optional int32 delayed_unassigned_shards = 9;
+  optional double active_shards_percent = 10;
+  optional ClusterHealthStatus status = 11;
+  // Keyed by index name. Empty unless index-level health was requested.
+  map<string, ClusterIndexHealth> indices = 12;
+}

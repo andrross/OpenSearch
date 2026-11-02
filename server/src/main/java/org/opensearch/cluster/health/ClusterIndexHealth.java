@@ -327,9 +327,9 @@ public final class ClusterIndexHealth implements Iterable<ClusterShardHealth>, W
     }
 
     /**
-     * For XContent Parser and serialization tests
+     * For XContent Parser, serialization tests and conversion from other wire formats
      */
-    ClusterIndexHealth(
+    public ClusterIndexHealth(
         String index,
         int numberOfShards,
         int numberOfReplicas,

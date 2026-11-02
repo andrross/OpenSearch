@@ -1,0 +1,33 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ */
+
+syntax = "proto3";
+package org.opensearch.action.admin.cluster.health.proto;
+
+import "org/opensearch/cluster/awarenesshealth/cluster_awareness_health.proto";
+import "org/opensearch/cluster/health/cluster_health_status.proto";
+import "org/opensearch/cluster/health/cluster_state_health.proto";
+import "org/opensearch/common/unit/time_value.proto";
+
+option java_outer_classname = "ClusterHealthResponseProto";
+
+// Wire form of org.opensearch.action.admin.cluster.health.ClusterHealthResponse.
+message ClusterHealthResponse {
+  optional string cluster_name = 1;
+  // The reported status. Usually equals cluster_state_health.status but the
+  // action may override it (e.g. RED when a requested index does not exist).
+  optional org.opensearch.cluster.health.proto.ClusterHealthStatus status = 2;
+  org.opensearch.cluster.health.proto.ClusterStateHealth cluster_state_health = 3;
+  optional int32 number_of_pending_tasks = 4;
+  optional bool timed_out = 5;
+  optional int32 number_of_in_flight_fetch = 6;
+  optional int32 delayed_unassigned_shards = 7;
+  org.opensearch.common.unit.proto.TimeValue task_max_waiting_time = 8;
+  // Present only when level=awareness_attributes was requested.
+  org.opensearch.cluster.awarenesshealth.proto.ClusterAwarenessHealth cluster_awareness_health = 9;
+}

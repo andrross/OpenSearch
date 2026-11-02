@@ -172,9 +172,9 @@ public final class ClusterShardHealth implements Writeable, ToXContentFragment {
     }
 
     /**
-     * For XContent Parser and serialization tests
+     * For XContent Parser, serialization tests and conversion from other wire formats
      */
-    ClusterShardHealth(
+    public ClusterShardHealth(
         int shardId,
         ClusterHealthStatus status,
         int activeShards,

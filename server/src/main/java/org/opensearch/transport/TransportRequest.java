@@ -36,6 +36,7 @@ import org.opensearch.common.annotation.PublicApi;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.tasks.TaskId;
+import org.opensearch.core.transport.ProtobufPayload;
 import org.opensearch.core.transport.TransportMessage;
 import org.opensearch.tasks.TaskAwareRequest;
 
@@ -90,8 +91,40 @@ public abstract class TransportRequest extends TransportMessage implements TaskA
         return parentTaskId;
     }
 
+    /**
+     * Writes the request as header fields followed by the payload.
+     * <p>
+     * Every request is <em>header fields</em> (task, routing and timeout metadata written by the base classes via
+     * {@link #writeHeaderFields(StreamOutput)}) followed by a <em>payload</em> (the action-specific fields). For a
+     * request implementing {@link ProtobufPayload} the payload is the protobuf message for a new enough peer and
+     * {@link #writeLegacy(StreamOutput)} otherwise. Requests that still hand-write their payload override this
+     * method and call {@code super.writeTo(out)} first, exactly as before.
+     */
     @Override
     public void writeTo(StreamOutput out) throws IOException {
+        writeHeaderFields(out);
+        if (this instanceof ProtobufPayload) {
+            ProtobufPayload.writePayload((ProtobufPayload) this, out, this::writeLegacy);
+        } else {
+            writeLegacy(out);
+        }
+    }
+
+    /**
+     * Writes the fields owned by the base classes, in hierarchy order. Intermediate base classes override this
+     * (calling {@code super.writeHeaderFields(out)} first) instead of {@link #writeTo(StreamOutput)}, so that the
+     * payload is always written after every header field.
+     */
+    protected void writeHeaderFields(StreamOutput out) throws IOException {
         parentTaskId.writeTo(out);
+    }
+
+    /**
+     * The pre-protobuf layout of the payload. Only called for requests implementing {@link ProtobufPayload}, and
+     * only for peers older than {@link ProtobufPayload#protobufSince()}. Frozen: must emit exactly what the leaf's
+     * {@code writeTo} emitted (after {@code super.writeTo}) before the request became protobuf-backed.
+     */
+    protected void writeLegacy(StreamOutput out) throws IOException {
+        // requests that hand-write their payload override writeTo and never get here
     }
 }

@@ -66,9 +66,16 @@ public abstract class ClusterInfoRequest<Request extends ClusterInfoRequest<Requ
         indicesOptions = IndicesOptions.readIndicesOptions(in);
     }
 
+    // Header fields and payload are written by TransportRequest#writeTo; this override only keeps the public method on
+    // this class for binary compatibility.
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
+    }
+
+    @Override
+    protected void writeHeaderFields(StreamOutput out) throws IOException {
+        super.writeHeaderFields(out);
         out.writeStringArray(indices);
         if (out.getVersion().before(Version.V_2_0_0)) {
             out.writeStringArray(Strings.EMPTY_ARRAY);

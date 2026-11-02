@@ -140,7 +140,7 @@ public class ClusterAwarenessAttributesHealth implements Iterable<ClusterAwarene
         }
     }
 
-    ClusterAwarenessAttributesHealth(
+    public ClusterAwarenessAttributesHealth(
         String awarenessAttributeName,
         Map<String, ClusterAwarenessAttributeValueHealth> awarenessAttributeValueHealthMap
     ) {

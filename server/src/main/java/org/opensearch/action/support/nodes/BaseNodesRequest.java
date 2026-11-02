@@ -128,9 +128,16 @@ public abstract class BaseNodesRequest<Request extends BaseNodesRequest<Request>
         return null;
     }
 
+    // Header fields and payload are written by TransportRequest#writeTo; this override only keeps the public method on
+    // this class for binary compatibility.
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
+    }
+
+    @Override
+    protected void writeHeaderFields(StreamOutput out) throws IOException {
+        super.writeHeaderFields(out);
         out.writeStringArrayNullable(nodesIds);
         out.writeOptionalArray(concreteNodes);
         out.writeOptionalTimeValue(timeout);

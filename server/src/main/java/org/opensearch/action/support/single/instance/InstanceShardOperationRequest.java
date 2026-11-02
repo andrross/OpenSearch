@@ -150,9 +150,16 @@ public abstract class InstanceShardOperationRequest<Request extends InstanceShar
         this.concreteIndex = concreteIndex;
     }
 
+    // Header fields and payload are written by TransportRequest#writeTo; this override only keeps the public method on
+    // this class for binary compatibility.
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
+    }
+
+    @Override
+    protected void writeHeaderFields(StreamOutput out) throws IOException {
+        super.writeHeaderFields(out);
         out.writeString(index);
         out.writeOptionalWriteable(shardId);
         out.writeTimeValue(timeout);
@@ -160,7 +167,7 @@ public abstract class InstanceShardOperationRequest<Request extends InstanceShar
     }
 
     public void writeThin(StreamOutput out) throws IOException {
-        super.writeTo(out);
+        super.writeHeaderFields(out); // parent header fields only; this class's own fields follow in thin form
         if (shardId != null && index.equals(shardId.getIndexName())) {
             out.writeBoolean(false);
         } else {

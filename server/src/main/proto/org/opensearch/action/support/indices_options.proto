@@ -1,0 +1,30 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ */
+
+syntax = "proto3";
+package org.opensearch.action.support.proto;
+
+option java_outer_classname = "IndicesOptionsProto";
+
+// Wire form of org.opensearch.action.support.IndicesOptions.
+// Field names mirror IndicesOptions.Option and IndicesOptions.WildcardStates so
+// the conversion is a direct enum-set projection in both directions.
+message IndicesOptions {
+  // IndicesOptions.Option
+  optional bool ignore_unavailable = 1;
+  optional bool ignore_aliases = 2;
+  optional bool allow_no_indices = 3;
+  optional bool forbid_aliases_to_multiple_indices = 4;
+  optional bool forbid_closed_indices = 5;
+  optional bool ignore_throttled = 6;
+
+  // IndicesOptions.WildcardStates
+  optional bool expand_wildcards_open = 7;
+  optional bool expand_wildcards_closed = 8;
+  optional bool expand_wildcards_hidden = 9;
+}

@@ -624,8 +624,8 @@ tasks.named("licenseHeaders").configure {
     dependsOn("generateProto")
     // Ignore our vendored version of Google Guice
     excludes << 'org/opensearch/common/inject/**/*'
-    // Ignore for protobuf generated code
-    excludes << 'org/opensearch/extensions/proto/*'
+    // Ignore for protobuf generated code (every generated class lives in a `.proto` sub-package)
+    excludes << 'org/opensearch/**/proto/*'
 }
 
 tasks.test {
@@ -674,8 +674,14 @@ tasks.register("japicmp", me.champeau.gradle.japicmp.JapicmpTask) {
             "org.opensearch.transport.client.IndicesAdminClient#updateView(*,*)",
             "org.opensearch.transport.client.IndicesAdminClient#updateViewAsync(*)"
         ]
-        oldClasspath.from(files("${buildDir}/japicmp-target/opensearch-${japicmpCompareTarget}.jar"))
-        newClasspath.from(tasks.named('jar'))
+        // Server classes extend and implement types declared in libs/core (ActionResponse, ProtobufPayload, ...). Both
+        // sides need their own opensearch-core on the classpath, otherwise japicmp cannot resolve those types and
+        // misreports superclasses and interfaces as added or removed.
+        oldClasspath.from(
+            files("${buildDir}/japicmp-target/opensearch-${japicmpCompareTarget}.jar"),
+            files("${buildDir}/japicmp-target/opensearch-core-${japicmpCompareTarget}.jar")
+        )
+        newClasspath.from(tasks.named('jar'), project(':libs:opensearch-core').tasks.named('jar'))
         onlyModified = true
         failOnModification = true
         ignoreMissingClasses = true
@@ -723,6 +729,7 @@ tasks.register("downloadJapicmpCompareTarget", Copy) {
 
     dependencies {
         japicmpCompareTargetArtifact("${groupId}:${artifactId}:${japicmpCompareTarget}:")
+        japicmpCompareTargetArtifact("${groupId}:opensearch-core:${japicmpCompareTarget}:")
     }
 
     from configurations.japicmpCompareTargetArtifact

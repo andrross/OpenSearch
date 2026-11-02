@@ -1,0 +1,29 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ */
+
+syntax = "proto3";
+package org.opensearch.common.unit.proto;
+
+option java_outer_classname = "TimeValueProto";
+
+// Wire form of org.opensearch.common.unit.TimeValue.
+message TimeValue {
+  enum TimeUnit {
+    TIME_UNIT_UNSPECIFIED = 0;
+    TIME_UNIT_NANOSECONDS = 1;
+    TIME_UNIT_MICROSECONDS = 2;
+    TIME_UNIT_MILLISECONDS = 3;
+    TIME_UNIT_SECONDS = 4;
+    TIME_UNIT_MINUTES = 5;
+    TIME_UNIT_HOURS = 6;
+    TIME_UNIT_DAYS = 7;
+  }
+
+  optional int64 duration = 1;
+  optional TimeUnit time_unit = 2;
+}

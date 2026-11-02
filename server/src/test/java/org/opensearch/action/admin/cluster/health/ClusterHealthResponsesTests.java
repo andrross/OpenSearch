@@ -244,6 +244,10 @@ public class ClusterHealthResponsesTests extends AbstractSerializingTestCase<Clu
 
     @Override
     protected ClusterHealthResponse createTestInstance() {
+        return createTestInstanceForLevel(level);
+    }
+
+    ClusterHealthResponse createTestInstanceForLevel(ClusterHealthRequest.Level level) {
         int indicesSize = randomInt(20);
         Map<String, ClusterIndexHealth> indices = new HashMap<>(indicesSize);
         if (ClusterHealthRequest.Level.INDICES.equals(level) || ClusterHealthRequest.Level.SHARDS.equals(level)) {

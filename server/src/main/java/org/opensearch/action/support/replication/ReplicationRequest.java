@@ -215,9 +215,16 @@ public abstract class ReplicationRequest<Request extends ReplicationRequest<Requ
         return validationException;
     }
 
+    // Header fields and payload are written by TransportRequest#writeTo; this override only keeps the public method on
+    // this class for binary compatibility.
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
+    }
+
+    @Override
+    protected void writeHeaderFields(StreamOutput out) throws IOException {
+        super.writeHeaderFields(out);
         out.writeOptionalWriteable(shardId);
         waitForActiveShards.writeTo(out);
         out.writeTimeValue(timeout);
@@ -230,7 +237,7 @@ public abstract class ReplicationRequest<Request extends ReplicationRequest<Requ
      * {@link #shardId}.
      */
     public void writeThin(StreamOutput out) throws IOException {
-        super.writeTo(out);
+        super.writeHeaderFields(out); // parent header fields only; this class's own fields follow in thin form
         waitForActiveShards.writeTo(out);
         out.writeTimeValue(timeout);
         if (shardId != null && index.equals(shardId.getIndexName())) {

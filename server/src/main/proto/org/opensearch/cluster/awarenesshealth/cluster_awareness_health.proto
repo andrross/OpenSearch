@@ -1,0 +1,38 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ */
+
+syntax = "proto3";
+package org.opensearch.cluster.awarenesshealth.proto;
+
+option java_outer_classname = "ClusterAwarenessHealthProto";
+
+// Wire form of org.opensearch.cluster.awarenesshealth.ClusterAwarenessAttributeValueHealth.
+message ClusterAwarenessAttributeValueHealth {
+  optional string name = 1;
+  optional int32 active_shards = 2;
+  optional int32 unassigned_shards = 3;
+  optional int32 initializing_shards = 4;
+  optional int32 relocating_shards = 5;
+  optional int32 nodes = 6;
+  optional double weight = 7;
+  // Not carried by the legacy wire format.
+  repeated string node_list = 8;
+}
+
+// Wire form of org.opensearch.cluster.awarenesshealth.ClusterAwarenessAttributesHealth.
+message ClusterAwarenessAttributesHealth {
+  optional string awareness_attribute_name = 1;
+  // Keyed by attribute value (e.g. zone name).
+  map<string, ClusterAwarenessAttributeValueHealth> values = 2;
+}
+
+// Wire form of org.opensearch.cluster.awarenesshealth.ClusterAwarenessHealth.
+message ClusterAwarenessHealth {
+  // Keyed by awareness attribute name.
+  map<string, ClusterAwarenessAttributesHealth> attributes = 1;
+}

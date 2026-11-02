@@ -64,6 +64,14 @@ public class ClusterAwarenessHealth implements Writeable, ToXContentFragment, It
         }
     }
 
+    /**
+     * Creates cluster awareness health from an already computed per-attribute map (e.g. converted from another
+     * wire format).
+     */
+    public ClusterAwarenessHealth(final Map<String, ClusterAwarenessAttributesHealth> clusterAwarenessAttributesHealthMap) {
+        this.clusterAwarenessAttributesHealthMap = clusterAwarenessAttributesHealthMap;
+    }
+
     public ClusterAwarenessHealth(final StreamInput in) throws IOException {
         int size = in.readVInt();
         if (size > 0) {

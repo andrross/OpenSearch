@@ -61,6 +61,29 @@ public abstract class TransportResponse extends TransportMessage {
     }
 
     /**
+     * Writes the response. Responses have no header fields, so the whole stream is the payload. For a response
+     * implementing {@link ProtobufPayload} the payload is the protobuf message for a new enough peer and
+     * {@link #writeLegacy(StreamOutput)} otherwise; any other response must override this method as before.
+     */
+    @Override
+    public void writeTo(StreamOutput out) throws IOException {
+        if (this instanceof ProtobufPayload) {
+            ProtobufPayload.writePayload((ProtobufPayload) this, out, this::writeLegacy);
+        } else {
+            writeLegacy(out);
+        }
+    }
+
+    /**
+     * The pre-protobuf layout of this response. Only called for peers older than
+     * {@link ProtobufPayload#protobufSince()}. Frozen: must emit exactly what {@code writeTo} emitted before the
+     * response became protobuf-backed.
+     */
+    protected void writeLegacy(StreamOutput out) throws IOException {
+        throw new UnsupportedOperationException(getClass().getName() + " must override writeTo or writeLegacy");
+    }
+
+    /**
      * Empty transport response
      *
      * @opensearch.internal

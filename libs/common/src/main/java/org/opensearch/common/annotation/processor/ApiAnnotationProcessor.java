@@ -57,6 +57,8 @@ import java.util.Set;
 public class ApiAnnotationProcessor extends AbstractProcessor {
     private static final String OPTION_CONTINUE_ON_FAILING_CHECKS = "continueOnFailingChecks";
     private static final String OPENSEARCH_PACKAGE = "org.opensearch";
+    private static final String GENERATED_ANNOTATION = "javax.annotation.Generated";
+    private static final String GENERATED_PROCESSING_ANNOTATION = "javax.annotation.processing.Generated";
 
     private final Set<Element> reported = new HashSet<>();
     private final Set<Element> validated = new HashSet<>();
@@ -363,6 +365,12 @@ public class ApiAnnotationProcessor extends AbstractProcessor {
             return;
         }
 
+        // Generated code (e.g. protobuf messages) cannot carry our annotations; its compatibility contract is the
+        // schema it was generated from.
+        if (isGenerated(element)) {
+            return;
+        }
+
         checkPublicVisibility(referencedBy, element);
 
         if (element.getAnnotation(PublicApi.class) == null
@@ -379,6 +387,26 @@ public class ApiAnnotationProcessor extends AbstractProcessor {
                         + ((referencedBy != null) ? " (referenced by " + referencedBy + ") " : "")
                 );
         }
+    }
+
+    /**
+     * Check if element, or any type enclosing it, is annotated as generated ({@code javax.annotation.Generated} or
+     * {@code javax.annotation.processing.Generated}). Matched by name so that the processor does not depend on
+     * either annotation being on the classpath.
+     * @param element element to inspect
+     * @return {@code true} if the element is part of generated code
+     */
+    private static boolean isGenerated(final Element element) {
+        for (Element current = element; current != null && current.getKind() != ElementKind.PACKAGE; current = current
+            .getEnclosingElement()) {
+            for (final AnnotationMirror mirror : current.getAnnotationMirrors()) {
+                final String name = mirror.getAnnotationType().toString();
+                if (GENERATED_ANNOTATION.equals(name) || GENERATED_PROCESSING_ANNOTATION.equals(name)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
