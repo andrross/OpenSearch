@@ -109,3 +109,108 @@ Four earlier designs were tried and rejected on the way here: a second action na
 policies), a legacy action delegating to a proto action (still a second name), a proto-typed action facade (one
 facade per action pattern), and parallel `Proto*` base classes (one per request family). Each was simpler than the
 last; the root-level split is the smallest.
+
+# Step two: `_tasks` and the `NamedWriteable` extension point
+
+The second migration picked `_tasks` because `TaskInfo` carries a `Task.Status`, a `NamedWriteable` that plugins
+register through `Plugin.getNamedWriteables()`, and because `BaseTasksResponse` carries exceptions. It is small,
+cold and read-only, so the extension-point question is isolated from the performance and mutability questions a
+write-path message will raise. The reindex module's `BulkByScrollTask.Status` is an unmodified out-of-package
+registrant to test against.
+
+## What was done
+
+| | |
+|---|---|
+| Schemas | `list_tasks.proto` (request, response), `task_info.proto` (with resource stats), `task_id.proto`, `named_writeable.proto` (the frame), `replication_task_status.proto` |
+| Root hierarchy | `TransportResponse` gains `writeHeaderFields`, mirroring `TransportRequest`; `ProtobufPayload` gains `protobufBytes(Version peerVersion)` with a default that ignores the version |
+| Frame | `NamedWriteableFrames` (`org.opensearch.common.io.stream`): `toProto(writeable, peerVersion)` writes the class's own bytes into a nested stream at the peer's version; `fromProto(frame, category, context)` resolves the name through the registry of the stream the container came from |
+| Classes | `ListTasksRequest` (envelope), `ListTasksResponse` (holds `List<TaskInfo>`, builds its message per peer), `TaskInfo` (envelope for every field but the status, plus the status), `BaseTasksResponse` (failures moved to `writeHeaderFields`), `ReplicationTask.Status` (opted in: a `Task.Status` that is itself a `ProtobufPayload`) |
+| Unchanged | `TransportListTasksAction`, `TransportTasksAction`, `TaskManager`, `TaskResult`, `RestListTasksAction`, every `Task.Status` registrant other than `ReplicationTask.Status` |
+| Tests | `TasksWireFormatTests`: legacy bytes identical to the released 3.9.0 artifact in both directions for request, response and three task infos (one with an opted-in status, one with none, one with `RawTaskStatus`); round trips on both encodings; an unmodified status with a version guard keeps its guard inside the frame; an opted-in status is protobuf inside the frame for a new peer and legacy for an old one; a bad name or trailing bytes fail at the frame |
+
+## Verification
+
+- `TasksWireFormatTests` × 10 seeds; `TaskInfoTests` × 20 seeds; the `tasks`, `support.tasks`, `support.replication`,
+  `index.reindex`, `health`, `transport` and `action.support` unit packages: 0 failures.
+- `TasksIT`, `CancellableTasksIT`; reindex `RethrottleTests`, `TransportRethrottleActionTests`; YAML `tasks.*` and
+  reindex `80_slices` (lists detailed tasks and reads `BulkByScrollTask.Status` fields).
+- `precommit` on `server` and `libs/core`; `japicmp` against 3.9.0.
+- Not run here: a live mixed 3.9/3.10 cluster.
+
+## The extension-point design
+
+A `NamedWriteable` field becomes a `NamedWriteable` message: the registry name and the class's bytes. The container's
+schema says "an extension goes here" and nothing more. Three properties follow:
+
+1. **An unmodified registrant works.** Its `writeTo` runs against a nested stream whose version is the peer's, so
+   `Version.onOrAfter` guards in plugin code behave exactly as they did. `BulkByScrollTask.Status` was not touched
+   and the sliced reindex tests pass. `TasksWireFormatTests` proves the guard with a status that writes a field only
+   to a 3.11 peer: framed for a 3.10 peer the field is omitted, framed for 3.11 it is present.
+2. **A registrant opts in on its own.** `ReplicationTask.Status` implements `ProtobufPayload` and applies the rule in
+   its own `writeTo`; the frame and `TaskInfo` do not know. Neither the registry nor the `NamedWriteable` interface
+   changed. A plugin can do the same when it wants to, with its own since-version.
+3. **Failures stay inside the frame.** The payload is length-delimited and must be fully consumed; a wrong name
+   fails at the registry lookup with the name in the message.
+
+The cost is that the legacy `StreamOutput` encoding cannot be deleted until every registrant has opted in. For the
+project's own registrants that is a list to work through. For plugins it means the 4.0 cutover is a plugin-breaking
+change, which 4.0 is anyway; the tenets now say so.
+
+## Decisions
+
+- **Exceptions stay on the legacy stream, as header fields.** `BaseTasksResponse` owns `taskFailures` and
+  `nodeFailures`, both written with `writeException`. The response hierarchy got the same `writeHeaderFields` hook
+  as requests and the failures moved into it, so `ListTasksResponse`'s message is tasks only. The exception encoding
+  (a numeric class registry, cause chains, suppressed, stack traces, metadata and headers, with wrapping of
+  unregistered types) appears in nearly every response in the codebase and deserves its own schema review; it should
+  not be settled inside a tasks or bulk PR. This is the same shape as request header fields: legacy on both encodings,
+  moved later in one place.
+- **A container with an extension-point field is not a frozen message.** The frame's bytes depend on the peer, so
+  `TaskInfo` holds its message without the status plus the decoded `Task.Status`, and `ListTasksResponse` holds
+  `List<TaskInfo>` and builds its message in `protobufBytes(Version)`. This is the first exception to "the generated
+  message is the only state"; the tenet was amended rather than worked around.
+- **`TaskInfo` applies the encoding rule itself.** It is a `Writeable` carried inside `NodeTasksResponse` and
+  `TaskResult`, not a transport message, so no root class chooses for it. Its `writeTo` calls
+  `ProtobufPayload.writePayload`, the same one-liner a root class uses. Nested `Writeable`s that cross the wire
+  inside legacy containers are a category the pilot did not have, and the mechanism covers them unchanged.
+- **`TaskId` absent means `EMPTY_TASK_ID`, by the wire's own criterion.** The legacy stream's test for the empty id is
+  an empty node id, not `TaskId.isSet()` (`id != -1`); a `TaskId("node", -1)` is odd but distinct, and
+  `TaskInfoTests` mutates to one. Matching the wire's predicate rather than the convenient one is what kept
+  `equals` identical.
+- **Deliberate behaviour changes:** `TaskInfo.getHeaders()` returns an unmodifiable view (no caller mutated it);
+  `ReplicationTask.Status` and `TaskInfo` `equals`/`hashCode` compare the message (and the status), which also
+  compares unknown fields a newer peer added. A `TaskInfo` with a `null` type or action (mocked tasks in
+  `SearchBackpressureServiceTests` produce one) is still accepted in memory, as before; on the legacy wire it still
+  fails at `writeString`, as before; on the protobuf wire the field is absent and reads back as `null`.
+
+## Hazards found
+
+- **`protobufBytes()` had no peer version.** Pure protobuf payloads do not need one; a payload that frames another
+  class's bytes does. Added `protobufBytes(Version)` with a default, and `writePayload` now calls it. This is the
+  interface change the pilot would have needed had health embedded an extension.
+- **"Responses have no header fields" was wrong.** `BaseTasksResponse`, `BaseNodesResponse`, `BroadcastResponse` and
+  `AcknowledgedResponse` all own fields above the leaf. `TransportResponse.writeTo` now mirrors
+  `TransportRequest.writeTo`. Intermediate response bases that still hand-write `writeTo` and are extended by
+  subclasses calling `super.writeTo(out)` produce identical bytes (`BaseTasksResponse.writeLegacy` is a no-op for
+  that reason, where the root's default throws).
+- **A legacy read yields explicit presence.** Reading `detailed=false` from the legacy stream produces a message with
+  the field set to `false`; the default instance has it absent. They are equal through the accessors and not equal
+  as messages. Tests should compare accessors, or compare messages only within one encoding.
+- **Map order.** The legacy stream reads maps into `HashMap`; the message keeps insertion order. `toString` of a
+  multi-entry header map can differ after a legacy round trip, exactly as it could before. Compare by equality.
+- **Generated class names shadow Java names again** (`TaskInfoProto.TaskInfo`, `ListTasksProto.ListTasksRequest`).
+  Still open from step one; two migrations now depend on whichever convention is chosen.
+- **Protobuf setters reject `null`; the old fields did not.** `TaskInfo` had always tolerated a `null` type or action
+  in memory. The envelope's constructor NPE'd in the builder instead, and only a test with mocked tasks caught it.
+  Every `String` field that a Java constructor could receive as `null` must map to "absent", whether or not the
+  legacy wire would have accepted it; the differential tests cannot see this because the legacy path NPE'd too.
+
+## Next
+
+1. Exception schema, reviewed on its own, then `BaseTasksResponse` failures into the message.
+2. Opt in the remaining server `Task.Status` registrants (`RawTaskStatus`, `ResyncTask.Status`,
+   `PersistentTasksNodeService.Status`, `BulkByScrollTask.Status`) to exercise the recipe on a `BytesReference`
+   payload and a status with nested structure.
+3. `protoc` and `buf` in `build-tools` so a plugin can opt a registrant in; until then the frame is the only path.
+4. Bulk: hot path, in-flight mutation, `writeThin`, `writeGenericValue` in `Script` params.

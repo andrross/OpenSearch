@@ -34,11 +34,24 @@ class's accessors, which own defaults, sentinels and conversion to domain types 
 generated types, and the generated types are not exposed outside the class's package. `equals`, `hashCode` and
 `toString` come from the message.
 
+The one exception is an extension-point field (below): its bytes depend on the peer, so the class holds it as a
+domain object next to the message and frames it when it writes. Nothing else earns a field of its own; a class
+that wants one must show a measured reason in its PR.
+
 The schema is shaped by the wire (every scalar `optional`, `_UNSPECIFIED` enums, no defaults); logic needs
 defaults applied and types with behaviour. Accessors are where one becomes the other, written once per field.
 If logic read the message directly, every read would have to repeat the presence check and the default, and a
 missed one (`getTimeout()` on an absent timeout) fails at runtime, not at compile time. The public Java API
 already requires these accessors to exist indefinitely, so reading through them adds no duplication.
+
+**Extension points are framed, not described.** A `NamedWriteable` field (a `Task.Status`, a `QueryBuilder`, an
+`InternalAggregation`) is a class chosen from the registry at runtime, often by a plugin, so the container's schema
+cannot name it. The container carries a `NamedWriteable` message: the registry name and the class's own bytes. An
+unmodified registrant writes its legacy layout into a nested stream pinned to the peer's version and keeps working,
+version guards included. A registrant opts in by implementing `ProtobufPayload` itself; the frame does not know
+which it got. "The schema is the source of truth" therefore holds for core and is opt-in for extensions, and the
+legacy encoding is deleted when the last registrant has opted in, which for plugins means the major-version
+cutover.
 
 **Absent is distinguishable from default.** Every scalar is `optional`. Enums carry an explicit
 `_UNSPECIFIED = 0`. Sentinels (`-1` meaning "all", `-2` meaning "default") are modelled as what they mean, not
@@ -54,9 +67,12 @@ not the serialization. The transport action does not change.
 
 **The split lives in one place.** Header fields versus payload, and protobuf versus legacy payload, are decided
 at the root of the message hierarchy (`TransportRequest`, `TransportResponse`), not in a parallel set of base
-classes. Opting a message in is implementing one interface. When the compatibility window closes, the legacy
-path is deleted as a unit: one branch at the root and every `writeLegacy`/`readLegacy`. Nothing is left to clean
-up per request family or per field.
+classes. Both roots have the same shape: intermediate bases that own fields write them in `writeHeaderFields`, the
+leaf owns the payload. A `Writeable` that crosses the wire inside another message rather than as a message of its
+own (`TaskInfo`) has no root to decide for it and applies the same one-line rule in its own `writeTo`. Opting a
+message in is implementing one interface. When the compatibility window closes, the legacy path is deleted as a
+unit: one branch at each root and every `writeLegacy`/`readLegacy`. Nothing is left to clean up per request family
+or per field.
 
 ## 2. Transparent to end users
 
@@ -93,6 +109,8 @@ and not changed.
 
 **Nothing is removed before its time.** The legacy encoding stays for the full compatibility window the project
 already guarantees. It is deleted at a major version boundary, together, with a release note, and not before.
+Because plugin registrants may still write their legacy layout inside a frame until then, that deletion is a
+plugin-breaking change and is scheduled as one.
 
 **Visible behaviour changes are listed, not discovered.** Where strict preservation is impossible or wrong
 (a `null` that became an empty array because the `null` was a latent NPE; an `equals` that now compares fields

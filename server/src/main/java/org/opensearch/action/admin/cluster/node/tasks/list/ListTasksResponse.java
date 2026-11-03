@@ -33,7 +33,9 @@
 package org.opensearch.action.admin.cluster.node.tasks.list;
 
 import org.opensearch.OpenSearchException;
+import org.opensearch.Version;
 import org.opensearch.action.TaskOperationFailure;
+import org.opensearch.action.admin.cluster.node.tasks.list.proto.ListTasksProto;
 import org.opensearch.action.support.tasks.BaseTasksResponse;
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.node.DiscoveryNodeRole;
@@ -45,14 +47,18 @@ import org.opensearch.core.common.Strings;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.tasks.TaskId;
+import org.opensearch.core.transport.ProtobufPayload;
 import org.opensearch.core.xcontent.ConstructingObjectParser;
 import org.opensearch.core.xcontent.MediaTypeRegistry;
 import org.opensearch.core.xcontent.ToXContentObject;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.tasks.TaskInfo;
+import org.opensearch.tasks.TaskInfoProtoConverters;
+import org.opensearch.tasks.proto.TaskInfoProto;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -68,9 +74,17 @@ import static org.opensearch.core.xcontent.ConstructingObjectParser.optionalCons
  * @opensearch.api
  */
 @PublicApi(since = "1.0.0")
-public class ListTasksResponse extends BaseTasksResponse implements ToXContentObject {
+public class ListTasksResponse extends BaseTasksResponse implements ToXContentObject, ProtobufPayload {
     private static final String TASKS = "tasks";
 
+    /** First version that encodes this response as protobuf on the wire. */
+    public static final Version PROTO_SINCE = Version.V_3_10_0;
+
+    /**
+     * The tasks are held as domain objects, not as a message, because each {@link TaskInfo} carries a
+     * {@code Task.Status} whose frame depends on the peer's version. The message is built when the response is
+     * written. Task and node failures are header fields owned by {@link BaseTasksResponse}.
+     */
     private final List<TaskInfo> tasks;
 
     private Map<String, List<TaskInfo>> perNodeTasks;
@@ -87,13 +101,63 @@ public class ListTasksResponse extends BaseTasksResponse implements ToXContentOb
     }
 
     public ListTasksResponse(StreamInput in) throws IOException {
-        super(in);
-        tasks = Collections.unmodifiableList(in.readList(TaskInfo::new));
+        super(in); // header fields
+        tasks = Collections.unmodifiableList(
+            ProtobufPayload.readPayload(
+                in,
+                PROTO_SINCE,
+                bytes -> fromProto(ListTasksProto.ListTasksResponse.parseFrom(bytes), in),
+                i -> i.readList(TaskInfo::new)
+            )
+        );
     }
 
+    // header fields and payload are written by TransportResponse#writeTo; kept here for binary compatibility
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
+    }
+
+    @Override
+    public Version protobufSince() {
+        return PROTO_SINCE;
+    }
+
+    @Override
+    public byte[] protobufBytes() {
+        return protobufBytes(Version.CURRENT);
+    }
+
+    @Override
+    public byte[] protobufBytes(Version peerVersion) {
+        try {
+            return message(peerVersion).toByteArray();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    /** The message for {@code peerVersion}. Package-private: code outside this package reads the accessors. */
+    ListTasksProto.ListTasksResponse message(Version peerVersion) throws IOException {
+        final ListTasksProto.ListTasksResponse.Builder b = ListTasksProto.ListTasksResponse.newBuilder();
+        for (TaskInfo task : tasks) {
+            b.addTasks(TaskInfoProtoConverters.toProto(task, peerVersion));
+        }
+        return b.build();
+    }
+
+    private static List<TaskInfo> fromProto(ListTasksProto.ListTasksResponse message, StreamInput context) throws IOException {
+        final List<TaskInfo> tasks = new ArrayList<>(message.getTasksCount());
+        for (TaskInfoProto.TaskInfo task : message.getTasksList()) {
+            tasks.add(TaskInfoProtoConverters.fromProto(task, context));
+        }
+        return tasks;
+    }
+
+    // ----- frozen legacy layout -----
+
+    @Override
+    protected void writeLegacy(StreamOutput out) throws IOException {
         out.writeList(tasks);
     }
 

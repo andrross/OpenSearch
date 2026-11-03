@@ -40,6 +40,18 @@ public interface ProtobufPayload {
     byte[] protobufBytes();
 
     /**
+     * The serialized protobuf message for a specific peer.
+     * <p>
+     * Most payloads are the same bytes for every peer and need only {@link #protobufBytes()}. A payload that embeds an
+     * extension point whose encoding is chosen by the extension (a {@code NamedWriteable} frame carrying another
+     * class's bytes) depends on the peer, because the embedded class applies its own version rules. Such a payload
+     * overrides this method and builds the message for {@code peerVersion}.
+     */
+    default byte[] protobufBytes(Version peerVersion) {
+        return protobufBytes();
+    }
+
+    /**
      * Whether {@code version} (a peer's version) receives the protobuf payload rather than the legacy layout.
      */
     static boolean useProtobuf(ProtobufPayload payload, Version version) {
@@ -51,7 +63,7 @@ public interface ProtobufPayload {
      */
     static void writePayload(ProtobufPayload payload, StreamOutput out, LegacyWriter legacy) throws IOException {
         if (useProtobuf(payload, out.getVersion())) {
-            out.writeByteArray(payload.protobufBytes());
+            out.writeByteArray(payload.protobufBytes(out.getVersion()));
         } else {
             legacy.write(out);
         }

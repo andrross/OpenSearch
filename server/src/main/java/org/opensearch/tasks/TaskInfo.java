@@ -43,14 +43,17 @@ import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.common.io.stream.Writeable;
 import org.opensearch.core.tasks.TaskId;
 import org.opensearch.core.tasks.resourcetracker.TaskResourceStats;
+import org.opensearch.core.transport.ProtobufPayload;
 import org.opensearch.core.xcontent.ConstructingObjectParser;
 import org.opensearch.core.xcontent.MediaTypeRegistry;
 import org.opensearch.core.xcontent.ObjectParserHelper;
 import org.opensearch.core.xcontent.ToXContentFragment;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.tasks.proto.TaskInfoProto;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
@@ -70,32 +73,19 @@ import static org.opensearch.core.xcontent.ConstructingObjectParser.optionalCons
  * @opensearch.api
  */
 @PublicApi(since = "1.0.0")
-public final class TaskInfo implements Writeable, ToXContentFragment {
-    private final TaskId taskId;
+public final class TaskInfo implements Writeable, ToXContentFragment, ProtobufPayload {
 
-    private final String type;
+    /** First version that encodes task info as protobuf on the wire. */
+    public static final Version PROTO_SINCE = Version.V_3_10_0;
 
-    private final String action;
-
-    private final String description;
-
-    private final long startTime;
-
-    private final long runningTimeNanos;
+    /**
+     * Every field except the status. The status is a {@link Task.Status}, an extension point chosen from the
+     * {@code NamedWriteableRegistry} at read time, whose bytes depend on the peer's version; it is framed into the
+     * message when the message is written (see {@link TaskInfoProtoConverters}).
+     */
+    private final TaskInfoProto.TaskInfo message;
 
     private final Task.Status status;
-
-    private final boolean cancellable;
-
-    private final boolean cancelled;
-
-    private final Long cancellationStartTime;
-
-    private final TaskId parentTaskId;
-
-    private final Map<String, String> headers;
-
-    private final TaskResourceStats resourceStats;
 
     public TaskInfo(
         TaskId taskId,
@@ -143,100 +133,177 @@ public final class TaskInfo implements Writeable, ToXContentFragment {
         TaskResourceStats resourceStats,
         Long cancellationStartTime
     ) {
-        if (cancellable == false && cancelled == true) {
-            throw new IllegalArgumentException("task cannot be cancelled");
-        }
-        this.taskId = taskId;
-        this.type = type;
-        this.action = action;
-        this.description = description;
-        this.status = status;
-        this.startTime = startTime;
-        this.runningTimeNanos = runningTimeNanos;
-        this.cancellable = cancellable;
-        this.cancelled = cancelled;
-        this.parentTaskId = parentTaskId;
-        this.headers = headers;
-        this.resourceStats = resourceStats;
-        this.cancellationStartTime = cancellationStartTime;
+        this(
+            TaskInfoProtoConverters.toProto(
+                taskId,
+                type,
+                action,
+                description,
+                startTime,
+                runningTimeNanos,
+                cancellable,
+                cancelled,
+                parentTaskId,
+                headers,
+                resourceStats,
+                cancellationStartTime
+            ),
+            status
+        );
     }
 
     /**
-     * Read from a stream.
+     * Wrap a message (without a status frame) and its decoded status. Package-private: callers outside this package
+     * use the public constructors and {@link TaskInfoProtoConverters}.
      */
-    @SuppressWarnings("unchecked")
+    TaskInfo(TaskInfoProto.TaskInfo message, Task.Status status) {
+        Objects.requireNonNull(message, "message");
+        if (message.getCancellable() == false && message.getCancelled()) {
+            throw new IllegalArgumentException("task cannot be cancelled");
+        }
+        this.message = message;
+        this.status = status;
+    }
+
     public TaskInfo(StreamInput in) throws IOException {
-        taskId = TaskId.readFromStream(in);
-        type = in.readString();
-        action = in.readString();
-        description = in.readOptionalString();
-        status = in.readOptionalNamedWriteable(Task.Status.class);
-        startTime = in.readLong();
-        runningTimeNanos = in.readLong();
-        cancellable = in.readBoolean();
+        this(
+            ProtobufPayload.readPayload(
+                in,
+                PROTO_SINCE,
+                bytes -> TaskInfoProtoConverters.fromProto(TaskInfoProto.TaskInfo.parseFrom(bytes), in),
+                TaskInfo::readLegacy
+            )
+        );
+    }
+
+    private TaskInfo(TaskInfo decoded) {
+        this(decoded.message, decoded.status);
+    }
+
+    /**
+     * {@link TaskInfo} is a {@code Writeable} carried inside other messages ({@code NodeTasksResponse},
+     * {@code TaskResult}), not a transport message, so no root class chooses its encoding; it applies the same rule
+     * itself.
+     */
+    @Override
+    public void writeTo(StreamOutput out) throws IOException {
+        ProtobufPayload.writePayload(this, out, this::writeLegacy);
+    }
+
+    @Override
+    public Version protobufSince() {
+        return PROTO_SINCE;
+    }
+
+    @Override
+    public byte[] protobufBytes() {
+        return protobufBytes(Version.CURRENT);
+    }
+
+    @Override
+    public byte[] protobufBytes(Version peerVersion) {
+        try {
+            return TaskInfoProtoConverters.toProto(this, peerVersion).toByteArray();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    /** The message without its status frame. Package-private: code outside this package reads the accessors. */
+    TaskInfoProto.TaskInfo message() {
+        return message;
+    }
+
+    // ----- frozen legacy layout -----
+
+    private static TaskInfo readLegacy(StreamInput in) throws IOException {
+        final TaskId taskId = TaskId.readFromStream(in);
+        final String type = in.readString();
+        final String action = in.readString();
+        final String description = in.readOptionalString();
+        final Task.Status status = in.readOptionalNamedWriteable(Task.Status.class);
+        final long startTime = in.readLong();
+        final long runningTimeNanos = in.readLong();
+        final boolean cancellable = in.readBoolean();
+        final boolean cancelled;
         if (in.getVersion().onOrAfter(Version.V_2_0_0)) {
             cancelled = in.readBoolean();
         } else {
             cancelled = false;
         }
-        if (cancellable == false && cancelled == true) {
-            throw new IllegalArgumentException("task cannot be cancelled");
-        }
-        parentTaskId = TaskId.readFromStream(in);
-        headers = in.readMap(StreamInput::readString, StreamInput::readString);
+        final TaskId parentTaskId = TaskId.readFromStream(in);
+        final Map<String, String> headers = in.readMap(StreamInput::readString, StreamInput::readString);
+        final TaskResourceStats resourceStats;
         if (in.getVersion().onOrAfter(Version.V_2_1_0)) {
             resourceStats = in.readOptionalWriteable(TaskResourceStats::new);
         } else {
             resourceStats = null;
         }
+        final Long cancellationStartTime;
         if (in.getVersion().onOrAfter(Version.V_2_8_0)) {
             cancellationStartTime = in.readOptionalLong();
         } else {
             cancellationStartTime = null;
         }
+        return new TaskInfo(
+            taskId,
+            type,
+            action,
+            description,
+            status,
+            startTime,
+            runningTimeNanos,
+            cancellable,
+            cancelled,
+            parentTaskId,
+            headers,
+            resourceStats,
+            cancellationStartTime
+        );
     }
 
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        taskId.writeTo(out);
-        out.writeString(type);
-        out.writeString(action);
-        out.writeOptionalString(description);
+    private void writeLegacy(StreamOutput out) throws IOException {
+        getTaskId().writeTo(out);
+        out.writeString(getType());
+        out.writeString(getAction());
+        out.writeOptionalString(getDescription());
         out.writeOptionalNamedWriteable(status);
-        out.writeLong(startTime);
-        out.writeLong(runningTimeNanos);
-        out.writeBoolean(cancellable);
+        out.writeLong(getStartTime());
+        out.writeLong(getRunningTimeNanos());
+        out.writeBoolean(isCancellable());
         if (out.getVersion().onOrAfter(Version.V_2_0_0)) {
-            out.writeBoolean(cancelled);
+            out.writeBoolean(isCancelled());
         }
-        parentTaskId.writeTo(out);
-        out.writeMap(headers, StreamOutput::writeString, StreamOutput::writeString);
+        getParentTaskId().writeTo(out);
+        out.writeMap(getHeaders(), StreamOutput::writeString, StreamOutput::writeString);
         if (out.getVersion().onOrAfter(Version.V_2_1_0)) {
-            out.writeOptionalWriteable(resourceStats);
+            out.writeOptionalWriteable(getResourceStats());
         }
         if (out.getVersion().onOrAfter(Version.V_2_8_0)) {
-            out.writeOptionalLong(cancellationStartTime);
+            out.writeOptionalLong(getCancellationStartTime());
         }
     }
 
+    // ----- public API (unchanged) -----
+
     public TaskId getTaskId() {
-        return taskId;
+        return TaskInfoProtoConverters.fromProto(message.getTaskId(), message.hasTaskId());
     }
 
     public long getId() {
-        return taskId.getId();
+        return getTaskId().getId();
     }
 
     public String getType() {
-        return type;
+        return message.hasType() ? message.getType() : null;
     }
 
     public String getAction() {
-        return action;
+        return message.hasAction() ? message.getAction() : null;
     }
 
     public String getDescription() {
-        return description;
+        return message.hasDescription() ? message.getDescription() : null;
     }
 
     /**
@@ -251,87 +318,92 @@ public final class TaskInfo implements Writeable, ToXContentFragment {
      * Returns the task start time
      */
     public long getStartTime() {
-        return startTime;
+        return message.getStartTime();
     }
 
     /**
      * Returns the task running time
      */
     public long getRunningTimeNanos() {
-        return runningTimeNanos;
+        return message.getRunningTimeNanos();
     }
 
     /**
      * Returns true if the task supports cancellation
      */
     public boolean isCancellable() {
-        return cancellable;
+        return message.getCancellable();
     }
 
     /**
      * Returns true if the task has been cancelled
      */
     public boolean isCancelled() {
-        return cancelled;
+        return message.getCancelled();
     }
 
     public Long getCancellationStartTime() {
-        return cancellationStartTime;
+        return message.hasCancellationStartTime() ? message.getCancellationStartTime() : null;
     }
 
     /**
      * Returns the parent task id
      */
     public TaskId getParentTaskId() {
-        return parentTaskId;
+        return TaskInfoProtoConverters.fromProto(message.getParentTaskId(), message.hasParentTaskId());
     }
 
     /**
      * Returns the task headers
      */
     public Map<String, String> getHeaders() {
-        return headers;
+        return message.getHeadersMap();
     }
 
     /**
      * Returns the task resource information
      */
     public TaskResourceStats getResourceStats() {
-        return resourceStats;
+        return message.hasResourceStats() ? TaskInfoProtoConverters.fromProto(message.getResourceStats()) : null;
     }
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        final TaskId taskId = getTaskId();
         builder.field("node", taskId.getNodeId());
         builder.field("id", taskId.getId());
-        builder.field("type", type);
-        builder.field("action", action);
+        builder.field("type", getType());
+        builder.field("action", getAction());
         if (status != null) {
             builder.field("status", status, params);
         }
+        final String description = getDescription();
         if (description != null) {
             builder.field("description", description);
         }
-        builder.timeField("start_time_in_millis", "start_time", startTime);
+        builder.timeField("start_time_in_millis", "start_time", getStartTime());
         if (builder.humanReadable()) {
-            builder.field("running_time", new TimeValue(runningTimeNanos, TimeUnit.NANOSECONDS).toString());
+            builder.field("running_time", new TimeValue(getRunningTimeNanos(), TimeUnit.NANOSECONDS).toString());
         }
-        builder.field("running_time_in_nanos", runningTimeNanos);
-        builder.field("cancellable", cancellable);
-        builder.field("cancelled", cancelled);
+        builder.field("running_time_in_nanos", getRunningTimeNanos());
+        builder.field("cancellable", isCancellable());
+        builder.field("cancelled", isCancelled());
+        final TaskId parentTaskId = getParentTaskId();
         if (parentTaskId.isSet()) {
             builder.field("parent_task_id", parentTaskId.toString());
         }
         builder.startObject("headers");
-        for (Map.Entry<String, String> attribute : headers.entrySet()) {
+        for (Map.Entry<String, String> attribute : getHeaders().entrySet()) {
             builder.field(attribute.getKey(), attribute.getValue());
         }
         builder.endObject();
+        final TaskResourceStats resourceStats = getResourceStats();
         if (resourceStats != null) {
             builder.startObject("resource_stats");
             resourceStats.toXContent(builder, params);
             builder.endObject();
         }
+        final Long cancellationStartTime = getCancellationStartTime();
         if (cancellationStartTime != null) {
             builder.humanReadableField("cancellation_time_millis", "cancellation_time", new TimeValue(cancellationStartTime));
         }
@@ -412,37 +484,11 @@ public final class TaskInfo implements Writeable, ToXContentFragment {
             return false;
         }
         TaskInfo other = (TaskInfo) obj;
-        return Objects.equals(taskId, other.taskId)
-            && Objects.equals(type, other.type)
-            && Objects.equals(action, other.action)
-            && Objects.equals(description, other.description)
-            && Objects.equals(startTime, other.startTime)
-            && Objects.equals(runningTimeNanos, other.runningTimeNanos)
-            && Objects.equals(parentTaskId, other.parentTaskId)
-            && Objects.equals(cancellable, other.cancellable)
-            && Objects.equals(cancelled, other.cancelled)
-            && Objects.equals(status, other.status)
-            && Objects.equals(headers, other.headers)
-            && Objects.equals(resourceStats, other.resourceStats)
-            && Objects.equals(cancellationStartTime, other.cancellationStartTime);
+        return message.equals(other.message) && Objects.equals(status, other.status);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(
-            taskId,
-            type,
-            action,
-            description,
-            startTime,
-            runningTimeNanos,
-            parentTaskId,
-            cancellable,
-            cancelled,
-            status,
-            headers,
-            resourceStats,
-            cancellationStartTime
-        );
+        return Objects.hash(message, status);
     }
 }

@@ -61,12 +61,17 @@ public abstract class TransportResponse extends TransportMessage {
     }
 
     /**
-     * Writes the response. Responses have no header fields, so the whole stream is the payload. For a response
+     * Writes the response as header fields followed by the payload.
+     * <p>
+     * Most responses have no header fields and the whole stream is the payload. Response families with an
+     * intermediate base class that owns fields ({@code BaseTasksResponse} and its task and node failures, for
+     * example) write those via {@link #writeHeaderFields(StreamOutput)}, exactly as request bases do. For a response
      * implementing {@link ProtobufPayload} the payload is the protobuf message for a new enough peer and
      * {@link #writeLegacy(StreamOutput)} otherwise; any other response must override this method as before.
      */
     @Override
     public void writeTo(StreamOutput out) throws IOException {
+        writeHeaderFields(out);
         if (this instanceof ProtobufPayload) {
             ProtobufPayload.writePayload((ProtobufPayload) this, out, this::writeLegacy);
         } else {
@@ -75,9 +80,16 @@ public abstract class TransportResponse extends TransportMessage {
     }
 
     /**
-     * The pre-protobuf layout of this response. Only called for peers older than
-     * {@link ProtobufPayload#protobufSince()}. Frozen: must emit exactly what {@code writeTo} emitted before the
-     * response became protobuf-backed.
+     * Writes the fields owned by intermediate base classes, in hierarchy order. A base class that owns fields
+     * overrides this (calling {@code super.writeHeaderFields(out)} first) instead of {@link #writeTo(StreamOutput)},
+     * so that a protobuf leaf's payload is always written after every header field. The root has none.
+     */
+    protected void writeHeaderFields(StreamOutput out) throws IOException {}
+
+    /**
+     * The pre-protobuf layout of this response's payload. Only called for peers older than
+     * {@link ProtobufPayload#protobufSince()}. Frozen: must emit exactly what {@code writeTo} emitted (after the
+     * header fields) before the response became protobuf-backed.
      */
     protected void writeLegacy(StreamOutput out) throws IOException {
         throw new UnsupportedOperationException(getClass().getName() + " must override writeTo or writeLegacy");

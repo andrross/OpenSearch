@@ -32,10 +32,13 @@
 
 package org.opensearch.action.support.replication;
 
+import org.opensearch.Version;
+import org.opensearch.action.support.replication.proto.ReplicationTaskStatusProto;
 import org.opensearch.core.common.Strings;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.tasks.TaskId;
+import org.opensearch.core.transport.ProtobufPayload;
 import org.opensearch.core.xcontent.MediaTypeRegistry;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.tasks.Task;
@@ -77,21 +80,43 @@ public class ReplicationTask extends Task {
     }
 
     /**
-     * Status of the replication task
+     * Status of the replication task.
+     * <p>
+     * A {@link Task.Status} that has opted in to protobuf. The frame that carries it (see
+     * {@code NamedWriteableFrames}) does not know; the status applies the encoding rule in its own {@code writeTo},
+     * exactly as a transport message's root class would.
      *
      * @opensearch.internal
      */
-    public static class Status implements Task.Status {
+    public static class Status implements Task.Status, ProtobufPayload {
         public static final String NAME = "replication";
 
-        private final String phase;
+        /** First version that encodes this status as protobuf on the wire. */
+        public static final Version PROTO_SINCE = Version.V_3_10_0;
+
+        private final ReplicationTaskStatusProto.ReplicationTaskStatus message;
 
         public Status(String phase) {
-            this.phase = requireNonNull(phase, "Phase cannot be null");
+            this(
+                ReplicationTaskStatusProto.ReplicationTaskStatus.newBuilder()
+                    .setPhase(requireNonNull(phase, "Phase cannot be null"))
+                    .build()
+            );
+        }
+
+        private Status(ReplicationTaskStatusProto.ReplicationTaskStatus message) {
+            this.message = message;
         }
 
         public Status(StreamInput in) throws IOException {
-            phase = in.readString();
+            this(
+                ProtobufPayload.<ReplicationTaskStatusProto.ReplicationTaskStatus>readPayload(
+                    in,
+                    PROTO_SINCE,
+                    ReplicationTaskStatusProto.ReplicationTaskStatus::parseFrom,
+                    i -> ReplicationTaskStatusProto.ReplicationTaskStatus.newBuilder().setPhase(i.readString()).build()
+                )
+            );
         }
 
         @Override
@@ -100,16 +125,30 @@ public class ReplicationTask extends Task {
         }
 
         @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject();
-            builder.field("phase", phase);
-            builder.endObject();
-            return builder;
+        public Version protobufSince() {
+            return PROTO_SINCE;
+        }
+
+        @Override
+        public byte[] protobufBytes() {
+            return message.toByteArray();
         }
 
         @Override
         public void writeTo(StreamOutput out) throws IOException {
-            out.writeString(phase);
+            ProtobufPayload.writePayload(this, out, o -> o.writeString(phase()));
+        }
+
+        private String phase() {
+            return message.getPhase();
+        }
+
+        @Override
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            builder.startObject();
+            builder.field("phase", phase());
+            builder.endObject();
+            return builder;
         }
 
         @Override
@@ -124,12 +163,12 @@ public class ReplicationTask extends Task {
                 return false;
             }
             ReplicationTask.Status other = (Status) obj;
-            return phase.equals(other.phase);
+            return message.equals(other.message);
         }
 
         @Override
         public int hashCode() {
-            return phase.hashCode();
+            return message.hashCode();
         }
     }
 }

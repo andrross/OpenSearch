@@ -1,0 +1,52 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ */
+
+syntax = "proto3";
+package org.opensearch.tasks.proto;
+
+import "org/opensearch/common/io/stream/named_writeable.proto";
+import "org/opensearch/tasks/task_id.proto";
+
+option java_outer_classname = "TaskInfoProto";
+
+// Wire form of org.opensearch.core.tasks.resourcetracker.TaskResourceUsage.
+message TaskResourceUsage {
+  optional int64 cpu_time_in_nanos = 1;
+  optional int64 memory_in_bytes = 2;
+}
+
+// Wire form of org.opensearch.core.tasks.resourcetracker.TaskThreadUsage.
+message TaskThreadUsage {
+  optional int32 thread_executions = 1;
+  optional int32 active_threads = 2;
+}
+
+// Wire form of org.opensearch.core.tasks.resourcetracker.TaskResourceStats.
+message TaskResourceStats {
+  // Keyed by resource stats type (e.g. "total", "worker_stats").
+  map<string, TaskResourceUsage> resource_usage = 1;
+  TaskThreadUsage thread_usage = 2;
+}
+
+// Wire form of org.opensearch.tasks.TaskInfo.
+message TaskInfo {
+  TaskId task_id = 1;
+  optional string type = 2;
+  optional string action = 3;
+  optional string description = 4;
+  // Task.Status is a registry-chosen extension point; see named_writeable.proto.
+  org.opensearch.common.io.stream.proto.NamedWriteable status = 5;
+  optional int64 start_time = 6;
+  optional int64 running_time_nanos = 7;
+  optional bool cancellable = 8;
+  optional bool cancelled = 9;
+  optional int64 cancellation_start_time = 10;
+  TaskId parent_task_id = 11;
+  map<string, string> headers = 12;
+  TaskResourceStats resource_stats = 13;
+}

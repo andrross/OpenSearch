@@ -1,0 +1,31 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ */
+
+syntax = "proto3";
+package org.opensearch.action.admin.cluster.node.tasks.list.proto;
+
+import "org/opensearch/tasks/task_info.proto";
+
+option java_outer_classname = "ListTasksProto";
+
+// Wire form of org.opensearch.action.admin.cluster.node.tasks.list.ListTasksRequest.
+//
+// Fields shared by every tasks request (task id, parent task id, nodes,
+// actions, timeout) are carried by the transport envelope, not by this message.
+message ListTasksRequest {
+  optional bool detailed = 1;
+  optional bool wait_for_completion = 2;
+}
+
+// Wire form of org.opensearch.action.admin.cluster.node.tasks.list.ListTasksResponse.
+//
+// Task and node failures are owned by BaseTasksResponse and carried by the
+// transport envelope, not by this message.
+message ListTasksResponse {
+  repeated org.opensearch.tasks.proto.TaskInfo tasks = 1;
+}

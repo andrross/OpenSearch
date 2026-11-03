@@ -85,8 +85,16 @@ public class BaseTasksResponse extends ActionResponse {
         this.nodeFailures = Collections.unmodifiableList(nodeFailures);
     }
 
+    // Header fields and payload are written by TransportResponse#writeTo; this override only keeps the public method on
+    // this class for binary compatibility.
     @Override
     public void writeTo(StreamOutput out) throws IOException {
+        super.writeTo(out);
+    }
+
+    @Override
+    protected void writeHeaderFields(StreamOutput out) throws IOException {
+        super.writeHeaderFields(out);
         out.writeVInt(taskFailures.size());
         for (TaskOperationFailure exp : taskFailures) {
             exp.writeTo(out);
@@ -96,6 +104,13 @@ public class BaseTasksResponse extends ActionResponse {
             exp.writeTo(out);
         }
     }
+
+    /**
+     * The payload of a plain {@code BaseTasksResponse} is empty; subclasses that hand-write fields override
+     * {@code writeTo} and call {@code super.writeTo(out)} first, exactly as before.
+     */
+    @Override
+    protected void writeLegacy(StreamOutput out) throws IOException {}
 
     /**
      * The list of task failures exception.
